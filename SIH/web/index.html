@@ -1,15 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Audience Intelligence — AI Research & Telemetry Studio</title>
-  <meta name="description" content="State-of-the-art social intelligence canvas for live X data extraction, sentiment analysis, demographic modeling, trend prediction, and network mapping.">
+  <meta name="description"
+    content="State-of-the-art social intelligence canvas for live X data extraction, sentiment analysis, demographic modeling, trend prediction, and network mapping.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body class="dark-theme framer-theme">
   <!-- Ambient Luminous Background Orbs (Framer Aura) -->
   <div class="ambient-glow ambient-top-left" aria-hidden="true"></div>
@@ -22,7 +27,8 @@
     <header class="app-header glass-island">
       <div class="brand">
         <div class="brand-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+            stroke-linejoin="round">
             <path d="M4 4l16 16M4 20L20 4"></path>
           </svg>
         </div>
@@ -82,7 +88,8 @@
       Audience Intelligence <span class="gradient-text">engineered for the canvas.</span>
     </h1>
     <p class="hero-subtitle">
-      Extract live public posts, extract graph edges, decode emotional polarity, predict viral velocity, and map influencer clusters in real time.
+      Extract live public posts, extract graph edges, decode emotional polarity, predict viral velocity, and map
+      influencer clusters in real time.
     </p>
 
     <!-- Quick Prompt Preset Chips -->
@@ -131,11 +138,13 @@
                 <span class="label-hint">Press Enter ↵</span>
               </label>
               <div class="search-input-box framer-input-box">
-                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2">
                   <circle cx="11" cy="11" r="8"></circle>
                   <path d="m21 21-4.3-4.3"></path>
                 </svg>
-                <input type="text" id="query-input" placeholder="e.g. artificial intelligence, #tech" required value="artificial intelligence">
+                <input type="text" id="query-input" placeholder="e.g. artificial intelligence, #tech" required
+                  value="artificial intelligence">
               </div>
             </div>
 
@@ -153,8 +162,62 @@
               </div>
 
               <div class="form-group col-half">
+                <label for="time-window-mode">Time Window</label>
+                <div class="custom-select-wrapper">
+                  <select id="time-window-mode" class="minimal-select">
+                    <option value="latest">⚡ Latest posts (now)</option>
+                    <option value="from_hours_ago" selected>🕐 From X hrs ago → now</option>
+                    <option value="older_than_hours">📜 Older than X hrs ago</option>
+                    <option value="by_date">📅 By date range</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dynamic Time Window Sub-controls -->
+            <div id="time-window-hours-row" class="form-row">
+              <div class="form-group col-half">
+                <label for="hours-ago-input">
+                  <span>Hours Ago</span>
+                  <span class="label-hint">e.g. 0.5 = 30 min</span>
+                </label>
+                <input type="number" id="hours-ago-input" class="minimal-date" value="0.5" min="0.1" max="168"
+                  step="0.1" placeholder="0.5">
+              </div>
+              <div class="form-group col-half">
+                <label style="opacity:0;">--</label>
+                <div class="time-window-preview" id="time-window-preview">📅 Posts from 30 min ago → now</div>
+              </div>
+            </div>
+            <div id="time-window-date-row" class="form-row" style="display:none;">
+              <div class="form-group col-half">
                 <label for="since-input">Since Date</label>
                 <input type="date" id="since-input" class="minimal-date">
+              </div>
+              <div class="form-group col-half">
+                <label for="until-input">Until Date</label>
+                <input type="date" id="until-input" class="minimal-date">
+              </div>
+            </div>
+
+            <!-- Comments Toggle -->
+            <div class="form-row" style="align-items:center; gap: 12px;">
+              <label class="engine-chip toggle-chip" style="flex:1;">
+                <input type="checkbox" id="chk-comments">
+                <span class="chip-content">
+                  <span class="chip-icon">💬</span>
+                  <span class="chip-text">Scrape Comments</span>
+                </span>
+              </label>
+              <div class="form-group" id="comments-limit-group" style="flex:1; display:none;">
+                <label for="comments-limit-input">Max Comments / Post</label>
+                <div class="custom-select-wrapper">
+                  <select id="comments-limit-input" class="minimal-select">
+                    <option value="5">5 comments</option>
+                    <option value="10" selected>10 comments</option>
+                    <option value="20">20 comments</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -272,11 +335,14 @@
             <div class="empty-state" id="feed-empty-state">
               <div class="empty-icon-halo">
                 <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                  <path
+                    d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z">
+                  </path>
                 </svg>
               </div>
               <h4>No tweets scraped yet</h4>
-              <p>Configure your search query on the left or select a prompt preset above to stream live public posts.</p>
+              <p>Configure your search query on the left or select a prompt preset above to stream live public posts.
+              </p>
             </div>
             <div class="tweet-stream" id="tweet-stream" style="display: none;"></div>
           </div>
@@ -294,7 +360,8 @@
                 </svg>
               </div>
               <h4>No graph edges detected</h4>
-              <p>Edges are derived automatically when scraped posts contain direct replies, quotes, or mention links.</p>
+              <p>Edges are derived automatically when scraped posts contain direct replies, quotes, or mention links.
+              </p>
             </div>
             <div class="edges-table-container" id="edges-table-container" style="display: none;">
               <table class="edges-table">
@@ -336,13 +403,18 @@
               <div class="intel-card" style="margin-top: 14px;">
                 <div class="intel-card-header"><span class="intel-title">Average Sarcasm Probability</span></div>
                 <div class="sarcasm-meter">
-                  <div class="sarcasm-bar-bg"><div class="sarcasm-bar-fill" id="sarcasm-bar-fill"></div></div>
+                  <div class="sarcasm-bar-bg">
+                    <div class="sarcasm-bar-fill" id="sarcasm-bar-fill"></div>
+                  </div>
                   <span class="sarcasm-val" id="sarcasm-val">0%</span>
                 </div>
-                <div class="sub-caption">Ensemble: model contradiction + rule-based cue detection. Displayed as probability, not ground truth.</div>
+                <div class="sub-caption">Ensemble: model contradiction + rule-based cue detection. Displayed as
+                  probability, not ground truth.</div>
               </div>
               <!-- Per-tweet sentiment cards -->
-              <h4 style="margin-top: 18px; margin-bottom: 10px; color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; letter-spacing: -0.01em;">Per-Post Sentiment Breakdown</h4>
+              <h4
+                style="margin-top: 18px; margin-bottom: 10px; color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; letter-spacing: -0.01em;">
+                Per-Post Sentiment Breakdown</h4>
               <div id="sentiment-per-tweet" class="tweet-stream"></div>
             </div>
           </div>
@@ -357,7 +429,8 @@
             <div id="demographics-dashboard" style="display: none;">
               <div class="privacy-notice">
                 <span class="shield-icon">🔒</span>
-                <span>All demographic modeling is aggregated to privacy-preserving cohort counts. Individual user profiling is strictly prohibited.</span>
+                <span>All demographic modeling is aggregated to privacy-preserving cohort counts. Individual user
+                  profiling is strictly prohibited.</span>
               </div>
               <div class="intel-grid">
                 <div class="intel-card">
@@ -387,7 +460,8 @@
             <div class="empty-state" id="trends-empty-state">
               <div class="empty-icon-halo">📈</div>
               <h4>No trend data yet</h4>
-              <p>Run a scrape with 'Trends & Topics' enabled to detect real-time bursts, predicted virality, and topic clusters.</p>
+              <p>Run a scrape with 'Trends & Topics' enabled to detect real-time bursts, predicted virality, and topic
+                clusters.</p>
             </div>
             <div id="trends-dashboard" style="display: none;">
               <!-- Highlights Banner -->
@@ -452,72 +526,111 @@
             <div class="empty-state" id="network-empty-state">
               <div class="empty-icon-halo">🕸️</div>
               <h4>No network graph yet</h4>
-              <p>Run a scrape to extract interaction edges, identify Key Opinion Leaders (KOLs), and map sentiment propagation.</p>
+              <p>Run a scrape with 🕸️ Network & KOLs enabled to map the interaction graph.</p>
             </div>
             <div id="network-dashboard" style="display: none;">
-              <!-- Network Stats Bar -->
+
+              <!-- ── Stats ribbon ───────────────────────────────── -->
               <div class="network-stats-bar">
-                <div class="stat-pill"><span class="stat-num" id="net-nodes-count">0</span> Users / Nodes</div>
-                <div class="stat-pill"><span class="stat-num" id="net-edges-count">0</span> Directed Edges</div>
-                <div class="stat-pill"><span class="stat-num" id="net-density-val">0.0</span> Graph Density</div>
+                <div class="stat-pill"><span class="stat-num" id="net-nodes-count">0</span> Nodes</div>
+                <div class="stat-pill"><span class="stat-num" id="net-edges-count">0</span> Edges</div>
+                <div class="stat-pill"><span class="stat-num" id="net-density-val">0.0</span> Density</div>
                 <div class="stat-pill"><span class="stat-num" id="net-community-count">0</span> Communities</div>
+                <div class="stat-pill net-settle-badge" id="net-settle-badge">⚙️ Settling…</div>
               </div>
 
-              <!-- Interactive Canvas Graph Card -->
-              <div class="intel-card" style="margin-top: 14px; position: relative;">
-                <div class="intel-card-header" style="justify-content: space-between; align-items: center;">
-                  <span class="intel-title">🌐 Interactive Interaction & Influence Network</span>
-                  <div class="canvas-controls">
-                    <button class="btn-ghost-sm" id="btn-graph-zoom-in" title="Zoom in">+</button>
-                    <button class="btn-ghost-sm" id="btn-graph-zoom-out" title="Zoom out">−</button>
-                    <button class="btn-ghost-sm" id="btn-graph-reset" title="Reset View">Reset</button>
+              <!-- ── Graph toolbar ──────────────────────────────── -->
+              <div class="graph-toolbar">
+                <div class="graph-search-wrap">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.3-4.3" />
+                  </svg>
+                  <input id="graph-search" type="text" placeholder="Search node…" autocomplete="off">
+                </div>
+                <select id="graph-filter-archetype" class="graph-filter-select">
+                  <option value="all">All Archetypes</option>
+                  <option value="Key Opinion Leader">👑 KOL</option>
+                  <option value="Broadcast Amplifier">📡 Amplifier</option>
+                  <option value="Information Broker">🔗 Broker</option>
+                  <option value="Active Responder">💬 Responder</option>
+                </select>
+                <select id="graph-filter-sentiment" class="graph-filter-select">
+                  <option value="all">All Sentiments</option>
+                  <option value="positive">😊 Positive</option>
+                  <option value="negative">😠 Negative</option>
+                  <option value="neutral">😐 Neutral</option>
+                </select>
+                <div class="graph-zoom-row">
+                  <button class="btn-ghost-sm" id="btn-graph-zoom-in" title="Zoom in">+</button>
+                  <button class="btn-ghost-sm" id="btn-graph-zoom-out" title="Zoom out">−</button>
+                  <button class="btn-ghost-sm" id="btn-graph-fit" title="Fit graph">Fit</button>
+                  <button class="btn-ghost-sm" id="btn-graph-reset" title="Reset">Reset</button>
+                </div>
+              </div>
+
+              <!-- ── Canvas + sidebar ───────────────────────────── -->
+              <div class="graph-canvas-layout">
+                <div class="graph-canvas-area" style="position:relative;">
+                  <canvas id="network-canvas"></canvas>
+                  <div id="canvas-tooltip" class="graph-tooltip" style="display:none;"></div>
+                  <!-- inline legend -->
+                  <div class="graph-inline-legend">
+                    <div class="gli-item"><span class="gli-dot" style="background:#38bdf8"></span>KOL</div>
+                    <div class="gli-item"><span class="gli-dot" style="background:#10b981"></span>Amplifier</div>
+                    <div class="gli-item"><span class="gli-dot" style="background:#a855f7"></span>Broker</div>
+                    <div class="gli-item"><span class="gli-dot" style="background:#f59e0b"></span>Responder</div>
+                    <div class="gli-hint">Scroll to zoom · Drag to pan · Click node</div>
                   </div>
                 </div>
-
-                <div class="canvas-wrapper framer-canvas-wrapper">
-                  <canvas id="network-canvas" width="750" height="380"></canvas>
-                  <div id="canvas-tooltip" class="graph-tooltip" style="display: none;"></div>
-                </div>
-
-                <div class="canvas-legend">
-                  <div class="legend-item"><span class="legend-node-sample" style="background: #38bdf8;"></span> Cyan: Primary Cluster</div>
-                  <div class="legend-item"><span class="legend-node-sample" style="background: #10b981;"></span> Emerald: Positive Cohort</div>
-                  <div class="legend-item"><span class="legend-node-sample" style="background: #a855f7;"></span> Purple: Tech Amplifiers</div>
-                  <div class="legend-item"><span class="legend-node-sample" style="background: #f59e0b;"></span> Amber: Critical/Debate Cohort</div>
-                  <div class="legend-item legend-hint"><span>Node Size ∝ Influence Score • Drag nodes or pan canvas</span></div>
-                </div>
-              </div>
-
-              <!-- Key Opinion Leaders (KOLs) Leaderboard -->
-              <div class="intel-card" style="margin-top: 14px;">
-                <div class="intel-card-header">
-                  <span class="intel-title">👑 Key Opinion Leaders (KOLs) & High-Influence Nodes</span>
-                  <span class="sub-caption">Multi-metric centrality (PageRank, In-Degree, Betweenness)</span>
-                </div>
-                <div class="kol-table-container">
-                  <table class="kol-table">
-                    <thead>
-                      <tr>
-                        <th>Rank</th>
-                        <th>User Handle</th>
-                        <th>Archetype</th>
-                        <th>Influence Score</th>
-                        <th>PageRank</th>
-                        <th>Authority (In)</th>
-                        <th>Amplifier (Out)</th>
-                        <th>Broker (Betweenness)</th>
-                        <th>Sentiment</th>
-                      </tr>
-                    </thead>
-                    <tbody id="kol-table-body"></tbody>
-                  </table>
+                <!-- Node detail panel -->
+                <div class="graph-detail-panel" id="graph-detail-panel">
+                  <div class="gdp-empty" id="gdp-empty">
+                    <div style="font-size:2rem;">🖱️</div>
+                    <p>Click any node to inspect</p>
+                  </div>
+                  <div class="gdp-content" id="gdp-content" style="display:none;">
+                    <div class="gdp-avatar" id="gdp-avatar">?</div>
+                    <div class="gdp-name" id="gdp-name">—</div>
+                    <div class="gdp-handle" id="gdp-handle">—</div>
+                    <div class="gdp-archetype" id="gdp-archetype">—</div>
+                    <div class="gdp-metrics">
+                      <div class="gdp-metric"><span class="gdp-metric-label">Influence</span><span
+                          class="gdp-metric-val" id="gdp-score">—</span></div>
+                      <div class="gdp-metric"><span class="gdp-metric-label">PageRank</span><span class="gdp-metric-val"
+                          id="gdp-pagerank">—</span></div>
+                      <div class="gdp-metric"><span class="gdp-metric-label">In-Degree</span><span
+                          class="gdp-metric-val" id="gdp-indegree">—</span></div>
+                      <div class="gdp-metric"><span class="gdp-metric-label">Out-Degree</span><span
+                          class="gdp-metric-val" id="gdp-outdegree">—</span></div>
+                      <div class="gdp-metric"><span class="gdp-metric-label">Betweenness</span><span
+                          class="gdp-metric-val" id="gdp-between">—</span></div>
+                      <div class="gdp-metric"><span class="gdp-metric-label">Followers</span><span
+                          class="gdp-metric-val" id="gdp-followers">—</span></div>
+                    </div>
+                    <div class="gdp-sentiment-row" id="gdp-sentiment-row"></div>
+                    <button class="gdp-close" id="gdp-close">✕ Close</button>
+                  </div>
                 </div>
               </div>
 
-              <!-- User Segments / Communities -->
-              <div class="intel-card" style="margin-top: 14px;">
+              <!-- ── KOL cards ──────────────────────────────────── -->
+              <div class="intel-card" style="margin-top:14px;">
                 <div class="intel-card-header">
-                  <span class="intel-title">👥 User Segments & Community Alignment</span>
+                  <span class="intel-title">👑 Key Opinion Leaders</span>
+                  <span class="sub-caption">PageRank · In-Degree · Betweenness centrality</span>
+                </div>
+                <div id="kol-cards-grid" class="kol-cards-grid"></div>
+                <!-- keep hidden tbody for backward compat -->
+                <table style="display:none">
+                  <tbody id="kol-table-body"></tbody>
+                </table>
+              </div>
+
+              <!-- ── Community cards ────────────────────────────── -->
+              <div class="intel-card" style="margin-top:14px;">
+                <div class="intel-card-header">
+                  <span class="intel-title">👥 Community Clusters</span>
                   <span class="sub-caption">Modularity community detection</span>
                 </div>
                 <div id="communities-cards-grid" class="communities-grid"></div>
@@ -555,7 +668,8 @@
       </div>
       <div class="modal-body">
         <p class="modal-desc">
-          <code>twscrape</code> distributes queries across authenticated accounts in <code>accounts.txt</code> to bypass single-account rate limits.
+          <code>twscrape</code> distributes queries across authenticated accounts in <code>accounts.txt</code> to bypass
+          single-account rate limits.
         </p>
 
         <div class="code-box">
@@ -575,7 +689,8 @@ username:password:email:email_password</code></pre>
             <span>Quick Update accounts.txt</span>
             <span class="label-hint">One account per line</span>
           </label>
-          <textarea id="accounts-content-input" rows="6" placeholder="username:password:email:email_password:cookies=..."></textarea>
+          <textarea id="accounts-content-input" rows="6"
+            placeholder="username:password:email:email_password:cookies=..."></textarea>
         </div>
 
         <div class="modal-actions">
@@ -588,4 +703,5 @@ username:password:email:email_password</code></pre>
 
   <script src="/static/app.js"></script>
 </body>
+
 </html>

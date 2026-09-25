@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     scrape_delay_max: float = 5.0
     circuit_breaker_threshold: int = 5   # errors in window before tripping
     circuit_breaker_timeout: int = 300   # seconds to pause after tripping
+    scrape_comments: bool = True         # Whether to scrape comments/replies on each post
+    max_comments_per_post: int = 10      # Maximum comments/replies scraped per post
+    scrape_comments_delay: float = 1.0   # Polite delay between reply extractions
 
     # ── NLP / Models ──────────────────────────────────────────
     device: str = "cpu"                  # "cpu" or "cuda"
@@ -43,7 +46,31 @@ class Settings(BaseSettings):
     google_translate_api_key: str = ""   # optional; deep-translator free tier used if empty
     emotion_csv_path: str = "emotions/tweet_emotions.csv"
 
+    # ── MuRIL — Primary Multilingual Sentiment Engine ─────────
+    # Core model: google/muril-base-cased (pre-trained on 17 Indian languages
+    # + Romanized Hindi / Hinglish code-mixed data via HuggingFace Transformers)
+    muril_model_id: str = "google/muril-base-cased"
+    # Directory for fine-tuned head checkpoints (emotion_head.pt, sarcasm_head.pt)
+    muril_checkpoint_dir: str = "models_cache/muril_checkpoints"
+    # Batch size for MuRIL inference (lower on CPU, higher on GPU)
+    muril_inference_batch_size: int = 8
 
+
+    # ── Telegram Ingestion (Phase 1) ───────────────────────────
+    # Credentials from https://my.telegram.org/apps
+    # Set in .env — NEVER hardcode
+    telegram_api_id: str = ""        # TELEGRAM_API_ID
+    telegram_api_hash: str = ""      # TELEGRAM_API_HASH
+    telegram_session_file: str = "telegram_session"
+    # Comma-separated list of public Telegram channels to ingest
+    telegram_channels: str = "BBCHindi,ndtvhindi,aajtak"   # override in .env
+
+    # ── X / Twitter (Phase 1) ──────────────────────────────────
+    # Official API credentials (free/basic tier)
+    # Use tweepy for live sliver; pre-pull fixture JSON for demo backfill
+    twitter_bearer_token: str = ""   # TWITTER_BEARER_TOKEN
+    # Directory containing pre-pulled JSON fixture files for demo backfill
+    fixture_data_dir: str = "fixtures"
     # ── Trends ────────────────────────────────────────────────
     trend_window_minutes: int = 15
     trend_top_n: int = 20

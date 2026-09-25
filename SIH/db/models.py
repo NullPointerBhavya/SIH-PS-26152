@@ -40,7 +40,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.orm import DeclarativeBase, relationship, synonym
 
 
 # ── Base ──────────────────────────────────────────────────────
@@ -95,7 +95,15 @@ class Post(Base):
     is_quote = Column(Boolean, default=False)
     is_reply = Column(Boolean, default=False)
     in_reply_to_post_id = Column(BigInteger, nullable=True)
+    parent_id = synonym("in_reply_to_post_id")
     in_reply_to_user_id = Column(BigInteger, nullable=True)
+
+    # Source platform — required for multi-source ingestion (Telegram, X, etc.)
+    source_platform = Column(Text, nullable=False, server_default="x",
+                             comment="Ingestion source: 'x' | 'telegram' | 'fixture'")
+    # Channel/group identifier for Telegram messages (NULL for X posts)
+    channel_id = Column(Text, nullable=True,
+                        comment="Telegram channel username or ID; NULL for X posts")
 
     hashtags = Column(ARRAY(Text), default=[])
     mentions = Column(ARRAY(Text), default=[])
@@ -104,6 +112,10 @@ class Post(Base):
     user = relationship("User", back_populates="posts")
     sentiment = relationship("SentimentScore", back_populates="post",
                              uselist=False, lazy="joined")
+
+
+# Alias for schema compatibility: unified_posts represents the core posts table
+unified_posts = Post.__table__
 
 
 # ── Sentiment Scores ─────────────────────────────────────────
@@ -207,8 +219,8 @@ class Edge(Base):
 # After SQLAlchemy creates the `posts` table, convert it to a hypertable.
 # This runs only on initial table creation, not on every app start.
 # For Alembic migrations, the same DDL is included in the migration file.
-_hypertable_ddl = DDL(
-    "SELECT create_hypertable('posts', 'created_at', "
-    "migrate_data => true, if_not_exists => true);"
-)
-event.listen(Post.__table__, "after_create", _hypertable_ddl)
+# _hypertable_ddl = DDL(
+#     "SELECT create_hypertable('posts', 'created_at', "
+#     "migrate_data => true, if_not_exists => true);"
+# )
+# event.listen(Post.__table__, "after_create", _hypertable_ddl)

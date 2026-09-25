@@ -62,6 +62,10 @@ def upgrade() -> None:
         sa.Column("is_reply", sa.Boolean(), server_default="false"),
         sa.Column("in_reply_to_post_id", sa.BigInteger(), nullable=True),
         sa.Column("in_reply_to_user_id", sa.BigInteger(), nullable=True),
+        sa.Column("source_platform", sa.Text(), nullable=False, server_default="x",
+                  comment="Ingestion source: 'x' | 'telegram' | 'fixture'"),
+        sa.Column("channel_id", sa.Text(), nullable=True,
+                  comment="Telegram channel username or ID; NULL for X posts"),
         sa.Column("hashtags", postgresql.ARRAY(sa.Text()), server_default="{}"),
         sa.Column("mentions", postgresql.ARRAY(sa.Text()), server_default="{}"),
         sa.PrimaryKeyConstraint("post_id"),
@@ -69,11 +73,11 @@ def upgrade() -> None:
     op.create_index("ix_posts_user_id", "posts", ["user_id"])
     op.create_index("ix_posts_created_at", "posts", ["created_at"])
 
-    # Convert posts to TimescaleDB hypertable
-    op.execute(
-        "SELECT create_hypertable('posts', 'created_at', "
-        "migrate_data => true, if_not_exists => true);"
-    )
+    # TimescaleDB hypertable conversion (skipped because foreign keys reference posts.post_id)
+    # op.execute(
+    #     "SELECT create_hypertable('posts', 'created_at', "
+    #     "migrate_data => true, if_not_exists => true);"
+    # )
 
     # ── sentiment_scores ──────────────────────────────────────
     op.create_table(

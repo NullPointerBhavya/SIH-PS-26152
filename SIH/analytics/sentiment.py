@@ -1,17 +1,23 @@
 """
-Sentiment & Emotion Analysis Engine — Multilingual Ensemble.
+Sentiment & Emotion Analysis Engine — Multilingual Ensemble with MuRIL.
 
-Supports: English, Hindi (Devanagari + Romanized/Hinglish), Tamil, Telugu,
-Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Urdu, and other
-popular languages via curated multilingual sentiment lexicons.
+Primary Engine: google/muril-base-cased (HuggingFace)
+  - Pre-trained on 17 Indian languages + Romanized Hindi (Hinglish)
+  - Handles code-mixed Hindi-English without any translation step
+  - Task 1: Multi-label Emotion/Stance (Anxiety, Anger, Support, Oppose)
+    via sigmoid-activated linear head (BCEWithLogitsLoss)
+  - Task 2: Contextual Sarcasm via sentence pairs
+    [CLS] parent_text [SEP] reply_text [SEP] — detects contextual dissonance
 
-Pipeline:
----------
-1. Language detection (langdetect or tweet.lang field)
-2. If English → VADER + English lexicon ensemble
-3. If Hindi/Indian → Curated Indic sentiment lexicon (800+ words)
-4. Sarcasm Detection: rule-based cue detector + model contradiction signal
-5. Nuanced emotion mapping → {supportive, against, excited, anxious, sarcastic-flag, neutral, other}
+Fallback Pipeline (when MuRIL model is unavailable or for English-only text):
+  1. Language detection (langdetect or tweet.lang field)
+  2. Translate non-English text to English (deep-translator)
+  3. VADER polarity scoring on English text
+  4. CSV-trained TF-IDF + LogReg emotion classifier (13 labels)
+  5. Rule-based sarcasm cue detector
+  6. Native Indic lexicons if translation fails (offline fallback)
+
+Library: PyTorch + HuggingFace Transformers (MuRIL) | vaderSentiment (fallback)
 """
 
 from __future__ import annotations
@@ -313,13 +319,22 @@ def preprocess_tweet(text: str) -> str:
 
 class SentimentEngine:
     """
-    Multilingual Ensemble Sentiment & Emotion Engine with Translate-First Architecture.
-    
-    1. Detects language and translates any non-English text to English (deep-translator / Google API).
-    2. Runs VADER polarity scoring on the normalized English text.
-    3. Runs CSV-trained ML Emotion Classifier (13 emotion labels) on the English text.
-    4. Sarcasm detection evaluated on the original text cues.
-    5. Fallback to native Indic lexicons if translation is unavailable/offline.
+    Multilingual Sentiment, Emotion & Sarcasm Engine.
+
+    PRIMARY PATH (MuRIL — PyTorch + HuggingFace Transformers):
+      Task 1 — Multi-label Emotion/Stance via MuRIL sequence classifier:
+               Labels: Anxiety | Anger | Support | Oppose
+               Activation: sigmoid (each label is independent)
+      Task 2 — Contextual Sarcasm via MuRIL sentence-pair classifier:
+               Input: [CLS] parent_text [SEP] reply_text [SEP]
+               Detects dissonance: tragic parent + celebratory reply = sarcasm
+
+    FALLBACK PATH (when MuRIL model is unavailable / not yet fine-tuned):
+      1. Translate non-English → English (deep-translator / Google API)
+      2. VADER polarity on English text
+      3. TF-IDF + LogReg emotion classifier (tweet_emotions.csv, 13 labels)
+      4. Rule-based sarcasm cue detector
+      5. Native Indic lexicons if translation fails
     """
 
     def __init__(self, device: str = "cpu"):
@@ -328,6 +343,8 @@ class SentimentEngine:
         self._vader_loaded = False
         self._translator = get_translation_service()
         self._emotion_classifier = get_emotion_classifier()
+        # MuRIL engine — lazy-loaded on first use
+        self._muril = None
 
         # Script → (positive_lexicon, negative_lexicon) mapping (Fallback path)
         self._indic_lexicons: Dict[str, Tuple[Dict, Dict]] = {
@@ -352,6 +369,25 @@ class SentimentEngine:
             logger.info("vader_engine_ready")
         except Exception as exc:
             logger.warning("vader_load_failed", error=str(exc))
+
+    def _ensure_muril(self):
+        """Lazy-load the MuRIL engine singleton on first call."""
+        if self._muril is not None:
+            return self._muril
+        try:
+            from analytics.muril_engine import get_muril_engine
+            from config import get_settings
+            s = get_settings()
+            self._muril = get_muril_engine(
+                device=s.device,
+                hf_cache_dir=s.hf_cache_dir,
+                checkpoint_dir=s.muril_checkpoint_dir,
+            )
+            self._muril.ensure_loaded()
+        except Exception as exc:
+            logger.warning("muril_engine_unavailable", error=str(exc))
+            self._muril = None
+        return self._muril
 
     @staticmethod
     def _detect_sarcasm_cues(text: str) -> float:
@@ -416,14 +452,30 @@ class SentimentEngine:
         # 3. English / other Latin → VADER
         return "en", *self._infer_vader_sentiment(text)
 
-    def score_text(self, text: str) -> SentimentResult:
+    def score_text(
+        self,
+        text: str,
+        parent_text: Optional[str] = None,
+    ) -> SentimentResult:
         """
-        Score a single text through the Translate-First multilingual pipeline:
-        1. Detect sarcasm cues on raw original text
-        2. Translate non-English text to English (via deep-translator or Google Cloud API)
-        3. Run VADER sentiment polarity on English text
-        4. Run CSV-trained ML Emotion Classifier (13 emotion labels)
-        5. Fallback to native Indic lexicons if translation is offline
+        Score a single text through the MuRIL-primary pipeline.
+
+        Primary Path (MuRIL available):
+          1. MuRIL multi-label emotion/stance inference (Anxiety, Anger, Support, Oppose)
+          2. MuRIL sentence-pair sarcasm detection using (parent_text, text)
+             Format: [CLS] parent_text [SEP] text [SEP]
+          3. Base polarity from VADER on (optionally translated) English text
+
+        Fallback Path (MuRIL unavailable):
+          1. Detect sarcasm cues from raw text (rule-based)
+          2. Translate non-English to English
+          3. VADER polarity
+          4. TF-IDF + LogReg emotion classifier (tweet_emotions.csv)
+
+        Args:
+            text:        The tweet / post text to analyse.
+            parent_text: Text of the parent post (for sarcasm sentence-pair analysis).
+                         Pass None for root posts.
         """
         if not text or not text.strip():
             return SentimentResult(
@@ -435,28 +487,57 @@ class SentimentEngine:
                 detected_language="en",
             )
 
-        processed = preprocess_tweet(text)
-        sarcasm_prob = self._detect_sarcasm_cues(text)
-
-        # 1. Translate to English if needed
-        trans_res = self._translator.translate_to_english(text)
-        english_text = trans_res.translated_text
-        detected_lang = trans_res.detected_language
+        # ── Polarity (VADER on translated English) — used by both paths ──────
+        trans_res      = self._translator.translate_to_english(text)
+        english_text   = trans_res.translated_text
+        detected_lang  = trans_res.detected_language
         was_translated = trans_res.was_translated
 
-        # 2. Base Sentiment Polarity (VADER on English text)
         if detected_lang == "en" or was_translated:
             sent_label, sent_score = self._infer_vader_sentiment(english_text)
         else:
-            # Fallback to Indic lexicon scoring if translation did not run
             _, sent_label, sent_score = self._detect_language_and_score(text)
 
-        # 3. Nuanced Emotion via ML classifier (trained on tweet_emotions.csv)
+        # ── PRIMARY PATH: MuRIL emotion + sarcasm ────────────────────────────
+        muril = self._ensure_muril()
+        if muril is not None:
+            try:
+                result = muril.analyze(
+                    reply_text=text,
+                    parent_text=parent_text,
+                    sentiment_label=sent_label,
+                    sentiment_score=sent_score,
+                    detected_language=detected_lang,
+                )
+                emotion_label, emotion_score = result.emotion.to_legacy_emotion()
+                # If MuRIL sarcasm probability is high, override emotion label
+                sarcasm_prob = result.sarcasm.is_sarcastic_prob
+                if sarcasm_prob >= 0.65:
+                    emotion_label = "sarcastic-flag"
+                    emotion_score = sarcasm_prob
+                return SentimentResult(
+                    sentiment_label=sent_label,
+                    sentiment_score=sent_score,
+                    emotion_label=emotion_label,
+                    emotion_score=emotion_score,
+                    is_sarcastic_prob=round(sarcasm_prob, 4),
+                    detected_language=detected_lang,
+                    translated_text=english_text if was_translated else None,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "muril_inference_failed_using_fallback",
+                    error=str(exc),
+                )
+
+        # ── FALLBACK PATH: rule-based sarcasm + CSV emotion classifier ────────
+        sarcasm_prob = self._detect_sarcasm_cues(text)
+
         if sarcasm_prob >= 0.65:
             emotion_label = "sarcastic-flag"
             emotion_score = sarcasm_prob
         else:
-            pred = self._emotion_classifier.predict(english_text)
+            pred          = self._emotion_classifier.predict(english_text)
             emotion_label = pred.label
             emotion_score = pred.confidence
 
@@ -470,9 +551,22 @@ class SentimentEngine:
             translated_text=english_text if was_translated else None,
         )
 
-    def score_batch(self, texts: List[str]) -> List[SentimentResult]:
-        """Score multiple texts."""
-        return [self.score_text(t) for t in texts]
+    def score_batch(
+        self,
+        texts: List[str],
+        parent_texts: Optional[List[Optional[str]]] = None,
+    ) -> List[SentimentResult]:
+        """
+        Score multiple texts.
+
+        Args:
+            texts:        List of tweet/post texts.
+            parent_texts: Parallel list of parent post texts (for sarcasm detection).
+                          Pass None or a list of Nones for root posts.
+        """
+        if parent_texts is None:
+            parent_texts = [None] * len(texts)
+        return [self.score_text(t, p) for t, p in zip(texts, parent_texts)]
 
 
 

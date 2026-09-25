@@ -1,9 +1,13 @@
 # ══════════════════════════════════════════════════════════════
-# Audience Intelligence Framework — Stage 1 Dependencies
+# Audience Intelligence Framework — All Dependencies
 # ══════════════════════════════════════════════════════════════
 
 # ── Scraper ───────────────────────────────────────────────────
-twscrape>=0.12
+# Phase 1 — Telegram first (reliable, native parent_id, no auth wall)
+telethon>=1.36              # Telegram public channel ingestion via Telethon
+# Phase 1 — X (bounded quota; pre-pull JSON fixture for demo backfill)
+tweepy>=4.14                # Official X API (free/basic tier)
+twscrape>=0.12              # Unofficial X scraper (backup; endpoint-dependent)
 
 # ── Database ──────────────────────────────────────────────────
 sqlalchemy[asyncio]>=2.0
@@ -16,11 +20,21 @@ fastapi>=0.110
 uvicorn[standard]>=0.27
 
 # ── NLP / Sentiment / Emotion ─────────────────────────────────
+# Phase 2 — MuRIL primary engine (google/muril-base-cased via HuggingFace):
+#   transformers  — model loading, tokenizer, AutoModel
+#   torch         — inference + fine-tuning (BCEWithLogitsLoss / CrossEntropyLoss)
+#   accelerate    — required by transformers trainer utilities
+#   datasets      — dataset handling for fine-tuning pipelines
+# Fallback pipeline:
+#   vaderSentiment — polarity scoring for English text
+#   deep-translator — translate Indic/other languages to English
 transformers>=4.38
 torch>=2.1
+accelerate>=0.27
+datasets>=2.18
+vaderSentiment>=3.3
 scipy>=1.12
 deep-translator>=1.11
-
 
 # ── Topic Modeling ────────────────────────────────────────────
 bertopic>=0.16
@@ -29,18 +43,29 @@ hdbscan>=0.8
 umap-learn>=0.5
 sentence-transformers>=2.5
 
-# ── Demographics NLP ──────────────────────────────────────────
+# ── Demographics NLP (Phase 3) ────────────────────────────────
 spacy>=3.7
+# REQUIRED model downloads:
+#   python -m spacy download xx_ent_wiki_sm   <- multilingual NER (Indic content)
+#   python -m spacy download en_core_web_sm   <- fallback for English-only bios
 langdetect>=1.0.9
 
-# ── Graph / Network ──────────────────────────────────────────
+# ── Burst Detection (Phase 4) ─────────────────────────────────
+# Kleinberg (2002) infinite automaton Poisson burst model
+# pip install burst_detection
+burst_detection>=0.1
+numpy>=1.24
+
+# ── Graph / Network (Phase 5) ─────────────────────────────────
 networkx>=3.2
-python-louvain>=0.16
+python-louvain>=0.16        # greedy_modularity fallback
+leidenalg>=0.10             # primary community detection (better than Louvain)
+python-igraph>=0.11         # required by leidenalg
 
 # ── Scheduling ────────────────────────────────────────────────
 apscheduler>=3.10
 
-# ── Config / Logging ─────────────────────────────────────────
+# ── Config / Logging ──────────────────────────────────────────
 pydantic>=2.6
 pydantic-settings>=2.1
 python-dotenv>=1.0

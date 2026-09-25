@@ -30,6 +30,23 @@ from logging_config import get_logger
 
 logger = get_logger("analytics.network")
 
+# leidenalg: pip install leidenalg python-igraph
+# Use leidenalg for community detection (superior to greedy_modularity on real social graphs)
+# Falls back to networkx greedy_modularity_communities if leidenalg is not installed.
+try:
+    import leidenalg
+    import igraph as ig
+    _LEIDEN_AVAILABLE = True
+    logger.info("leidenalg_available")
+except ImportError:
+    leidenalg = None
+    ig = None
+    _LEIDEN_AVAILABLE = False
+    logger.info(
+        "leidenalg_not_installed",
+        hint="pip install leidenalg python-igraph  (better community detection than greedy_modularity)",
+    )
+
 # Community palette colors for rich UI visualization
 COMMUNITY_COLORS = [
     "#3b82f6",  # Blue
@@ -249,24 +266,54 @@ class NetworkTopologyEngine:
         out_degrees = dict(G.out_degree())
 
         try:
-            betweenness = nx.betweenness_centrality(G) if total_nodes > 0 else {}
+            # Approximate betweenness (k=min(50,n)) — exact is O(VE) and unusable on large graphs
+            k_approx = min(50, total_nodes) if total_nodes >= 3 else None
+            betweenness = (
+                nx.betweenness_centrality(G, k=k_approx)
+                if total_nodes > 0
+                else {}
+            )
         except Exception:
             betweenness = {n: 0.0 for n in G.nodes()}
 
-        # 4. Community Detection
+        # 4. Community Detection — leidenalg primary, greedy_modularity fallback
         undirected_G = G.to_undirected()
         communities_map: Dict[str, int] = {}
         try:
             if total_nodes >= 3 and undirected_G.number_of_edges() > 0:
-                from networkx.algorithms.community import greedy_modularity_communities
-                raw_communities = list(greedy_modularity_communities(undirected_G))
-                for c_idx, comm in enumerate(raw_communities):
-                    for node in comm:
-                        communities_map[node] = c_idx
+                if _LEIDEN_AVAILABLE:
+                    # Convert networkx graph to igraph for leidenalg
+                    nodes_list_ordered = list(undirected_G.nodes())
+                    node_to_idx = {n: i for i, n in enumerate(nodes_list_ordered)}
+                    ig_edges = [
+                        (node_to_idx[u], node_to_idx[v])
+                        for u, v in undirected_G.edges()
+                    ]
+                    ig_graph = ig.Graph(n=len(nodes_list_ordered), edges=ig_edges)
+                    partition = leidenalg.find_partition(
+                        ig_graph, leidenalg.ModularityVertexPartition
+                    )
+                    for c_idx, community in enumerate(partition):
+                        for ig_node_idx in community:
+                            nx_node = nodes_list_ordered[ig_node_idx]
+                            communities_map[nx_node] = c_idx
+                    logger.info(
+                        "leiden_communities_found",
+                        n_communities=len(partition),
+                        n_nodes=total_nodes,
+                    )
+                else:
+                    # Fallback: greedy modularity (networkx built-in)
+                    from networkx.algorithms.community import greedy_modularity_communities
+                    raw_communities = list(greedy_modularity_communities(undirected_G))
+                    for c_idx, comm in enumerate(raw_communities):
+                        for node in comm:
+                            communities_map[node] = c_idx
             else:
                 for idx, node in enumerate(nodes_list):
                     communities_map[node] = idx % 3
-        except Exception:
+        except Exception as exc:
+            logger.warning("community_detection_failed", error=str(exc))
             for idx, node in enumerate(nodes_list):
                 communities_map[node] = idx % 3
 
@@ -456,3 +503,138 @@ def get_network_engine() -> NetworkTopologyEngine:
     if _network_engine_singleton is None:
         _network_engine_singleton = NetworkTopologyEngine()
     return _network_engine_singleton
+
+
+# ==============================================================================
+# Bot Scoring (Phase 5)
+# ==============================================================================
+
+def _text_shingles(text: str, k: int = 3) -> Set[str]:
+    """Character-level k-shingles for near-duplicate detection (no external lib)."""
+    text = text.lower().strip()
+    return {text[i:i+k] for i in range(max(0, len(text) - k + 1))}
+
+
+def _jaccard_similarity(a: Set[str], b: Set[str]) -> float:
+    if not a and not b:
+        return 1.0
+    union = len(a | b)
+    return len(a & b) / union if union > 0 else 0.0
+
+
+def score_bot_probability(
+    posts: List[Dict[str, Any]],
+    user_id: str,
+    all_user_posts: Optional[Dict[str, List[Dict]]] = None,
+    interval_cov_threshold: float = 0.15,
+    duplicate_jaccard_threshold: float = 0.75,
+    min_posts_for_interval: int = 5,
+) -> Dict[str, Any]:
+    """
+    Score bot probability using TWO signals (fixes the '60-second rule' false-positive problem).
+
+    SIGNAL 1 — Posting-interval Coefficient of Variation (CoV):
+        CoV = std(intervals) / mean(intervals)
+        Near-uniform CoV is suspicious — but news schedulers (BBCHindi, ANI) also
+        have low CoV. This signal alone will false-positive on real scheduled accounts.
+        Threshold (default 0.15) is deliberately conservative.
+
+    SIGNAL 2 — Near-duplicate content across accounts (3-char shingling + Jaccard):
+        A real news account posts original content per post.
+        A bot farm posts near-identical messages from multiple accounts simultaneously.
+        This is the signal that separates schedulers from actual bots.
+
+    Combined rule: BOTH signals must exceed thresholds to flag as bot.
+    Either signal alone is insufficient evidence.
+    """
+    import statistics
+
+    user_posts_sorted = sorted(posts, key=lambda p: p.get("created_at") or "")
+
+    # Signal 1: Posting-interval CoV
+    interval_cov: Optional[float] = None
+    interval_suspicious = False
+
+    if len(user_posts_sorted) >= min_posts_for_interval:
+        timestamps = []
+        for p in user_posts_sorted:
+            dt = p.get("created_at")
+            if isinstance(dt, datetime):
+                timestamps.append(dt.timestamp())
+            elif isinstance(dt, str):
+                try:
+                    timestamps.append(
+                        datetime.fromisoformat(dt.replace("Z", "+00:00")).timestamp()
+                    )
+                except Exception:
+                    pass
+
+        if len(timestamps) >= min_posts_for_interval:
+            timestamps.sort()
+            intervals = [
+                timestamps[i+1] - timestamps[i]
+                for i in range(len(timestamps) - 1)
+                if timestamps[i+1] - timestamps[i] > 0
+            ]
+            if intervals:
+                mean_i = statistics.mean(intervals)
+                if mean_i > 0:
+                    try:
+                        std_i = statistics.stdev(intervals)
+                        interval_cov = std_i / mean_i
+                        interval_suspicious = interval_cov < interval_cov_threshold
+                    except statistics.StatisticsError:
+                        interval_cov = 0.0
+                        interval_suspicious = True
+
+    # Signal 2: Near-duplicate content across accounts
+    max_jaccard = 0.0
+    content_duplicate_suspicious = False
+
+    if all_user_posts and len(user_posts_sorted) >= 2:
+        sample_shingles = [
+            _text_shingles(p.get("text", ""))
+            for p in user_posts_sorted[:5]
+        ]
+        outer_done = False
+        for other_uid, other_posts in all_user_posts.items():
+            if str(other_uid) == str(user_id) or not other_posts:
+                continue
+            for other_post in other_posts[:5]:
+                other_sh = _text_shingles(other_post.get("text", ""))
+                for this_sh in sample_shingles:
+                    j = _jaccard_similarity(this_sh, other_sh)
+                    if j > max_jaccard:
+                        max_jaccard = j
+                    if max_jaccard >= duplicate_jaccard_threshold:
+                        outer_done = True
+                        break
+                if outer_done:
+                    break
+            if outer_done:
+                break
+        content_duplicate_suspicious = max_jaccard >= duplicate_jaccard_threshold
+
+    # Combined scoring
+    both_suspicious = interval_suspicious and content_duplicate_suspicious
+    if both_suspicious:
+        cov_score = max(0.0, 1.0 - (interval_cov or 0.0) / interval_cov_threshold)
+        bot_probability = round(min(0.95, 0.5 + cov_score * 0.25 + max_jaccard * 0.25), 4)
+    elif interval_suspicious and all_user_posts is None:
+        bot_probability = 0.35
+    else:
+        bot_probability = round(max_jaccard * 0.15, 4)
+
+    return {
+        "user_id": user_id,
+        "bot_probability": bot_probability,
+        "is_bot_flagged": both_suspicious or (
+            interval_suspicious and all_user_posts is None and bot_probability > 0.3
+        ),
+        "signals": {
+            "interval_cov":                 round(interval_cov, 4) if interval_cov is not None else None,
+            "interval_suspicious":          interval_suspicious,
+            "max_cross_account_jaccard":    round(max_jaccard, 4),
+            "content_duplicate_suspicious": content_duplicate_suspicious,
+        },
+    }

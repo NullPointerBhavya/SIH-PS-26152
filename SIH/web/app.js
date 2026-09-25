@@ -15,11 +15,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const sessionEdgesCount = document.getElementById('session-edges-count');
   const lastLatencyVal = document.getElementById('last-latency-val');
 
-  // Form Elements
   const scraperForm = document.getElementById('scraper-form');
   const queryInput = document.getElementById('query-input');
   const limitInput = document.getElementById('limit-input');
   const sinceInput = document.getElementById('since-input');
+  const untilInput = document.getElementById('until-input');
+  const timeWindowMode = document.getElementById('time-window-mode');
+  const hoursAgoInput = document.getElementById('hours-ago-input');
+  const timeWindowPreview = document.getElementById('time-window-preview');
+  const timeWindowHoursRow = document.getElementById('time-window-hours-row');
+  const timeWindowDateRow = document.getElementById('time-window-date-row');
+  const chkComments = document.getElementById('chk-comments');
+  const commentsLimitGroup = document.getElementById('comments-limit-group');
+  const commentsLimitInput = document.getElementById('comments-limit-input');
   const chkSentiment = document.getElementById('chk-sentiment');
   const chkDemographics = document.getElementById('chk-demographics');
   const chkTrends = document.getElementById('chk-trends');
@@ -161,6 +169,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Time Window Mode logic
+  function updateTimeWindowUI() {
+    const mode = timeWindowMode ? timeWindowMode.value : 'latest';
+    const hours = parseFloat(hoursAgoInput ? hoursAgoInput.value : '0.5') || 0.5;
+    const minsLabel = hours === 0.5 ? '30 min' : hours < 1 ? `${Math.round(hours * 60)} min` : `${hours} hr${hours !== 1 ? 's' : ''}`;
+
+    if (timeWindowHoursRow) timeWindowHoursRow.style.display = (mode === 'from_hours_ago' || mode === 'older_than_hours') ? 'flex' : 'none';
+    if (timeWindowDateRow) timeWindowDateRow.style.display = mode === 'by_date' ? 'flex' : 'none';
+
+    if (timeWindowPreview) {
+      if (mode === 'latest') timeWindowPreview.textContent = '⚡ Fetching the most recent posts now';
+      else if (mode === 'from_hours_ago') timeWindowPreview.textContent = `📅 Posts from ${minsLabel} ago → now`;
+      else if (mode === 'older_than_hours') timeWindowPreview.textContent = `📜 Historical posts older than ${minsLabel} ago`;
+      else if (mode === 'by_date') timeWindowPreview.textContent = '📅 Posts in the selected date range';
+    }
+  }
+
+  if (timeWindowMode) {
+    timeWindowMode.addEventListener('change', updateTimeWindowUI);
+    updateTimeWindowUI();
+  }
+  if (hoursAgoInput) hoursAgoInput.addEventListener('input', updateTimeWindowUI);
+
+  // Comments toggle
+  if (chkComments) {
+    chkComments.addEventListener('change', () => {
+      if (commentsLimitGroup) commentsLimitGroup.style.display = chkComments.checked ? 'block' : 'none';
+    });
+  }
+
   // Initial status check & periodic poll
   fetchStatus();
   setInterval(fetchStatus, 8000);
@@ -176,6 +214,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const targetId = btn.getAttribute('data-target');
       const targetPane = document.getElementById(targetId);
       if (targetPane) targetPane.style.display = 'block';
+
+      if (targetId === 'network-view' && activeNetworkSimulation) {
+        setTimeout(() => activeNetworkSimulation.resize(), 50);
+      }
     });
   });
 
@@ -184,7 +226,12 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     const query = queryInput.value.trim();
     const limit = parseInt(limitInput.value, 10) || 10;
-    const since = sinceInput.value || null;
+    const mode = timeWindowMode ? timeWindowMode.value : 'latest';
+    const hoursAgo = parseFloat(hoursAgoInput ? hoursAgoInput.value : '0.5') || 0.5;
+    const since = (mode === 'by_date' && sinceInput) ? (sinceInput.value || null) : null;
+    const until = (mode === 'by_date' && untilInput) ? (untilInput.value || null) : null;
+    const scrapeComments = chkComments ? chkComments.checked : false;
+    const commentsLimit = commentsLimitInput ? parseInt(commentsLimitInput.value, 10) : 10;
 
     if (!query) {
       alert('Please enter a search query or hashtag.');
@@ -198,14 +245,25 @@ document.addEventListener('DOMContentLoaded', () => {
     btnSpinner.style.display = 'inline-block';
     btnText.textContent = runFull ? 'Running Full Intelligence Suite...' : 'Scraping live public X...';
 
-    addLog(`Starting pipeline: query="${query}" limit=${limit} mode=${runFull ? 'Full 4-Engine Analytics' : 'Scrape Only'}`, 'info');
+    const modeLabel = { latest: 'Latest', from_hours_ago: `From ${hoursAgo}h ago`, older_than_hours: `Older than ${hoursAgo}h`, by_date: 'By Date' }[mode] || mode;
+    addLog(`Starting pipeline: query="${query}" limit=${limit} window=${modeLabel}${scrapeComments ? ` +comments(${commentsLimit})` : ''}`, 'info');
     const startTime = performance.now();
+
+    const requestBody = {
+      query, limit,
+      time_window_mode: mode,
+      hours_ago: (mode === 'from_hours_ago' || mode === 'older_than_hours') ? hoursAgo : null,
+      since: since,
+      until: until,
+      scrape_comments: scrapeComments,
+      comments_limit: commentsLimit,
+    };
 
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, limit, since })
+        body: JSON.stringify(requestBody)
       });
 
       const latency = ((performance.now() - startTime) / 1000).toFixed(2);
@@ -219,6 +277,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       currentScrapedData = result;
       addLog(`Pipeline complete! Retrieved ${result.tweets.length} tweets in ${latency}s.`, 'success');
+
+      // Count total comments scraped
+      const totalComments = (result.tweets || []).reduce((acc, t) => acc + (t.comments ? t.comments.length : 0), 0);
+      if (totalComments > 0) {
+        addLog(`💬 ${totalComments} comments scraped across ${result.tweets.length} posts.`, 'success');
+      }
 
       // Update metrics
       sessionCountBadge.textContent = `${result.tweets.length} Items`;
@@ -284,7 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tweetStream.style.display = 'flex';
     tweetStream.innerHTML = '';
 
-    tweets.forEach(tweet => {
+    tweets.forEach((tweet, tIdx) => {
       const card = document.createElement('div');
       card.className = 'tweet-card';
 
@@ -313,6 +377,69 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (tweet.mentions && tweet.mentions.length) {
         tagsHtml += tweet.mentions.map(m => `<span class="tag-pill tag-mention">@${escapeHtml(m)}</span>`).join('');
+      }
+
+      // Render Comments Section
+      const comments = tweet.comments || [];
+      const commentsCount = comments.length;
+      let commentsSectionHtml = '';
+
+      if (commentsCount > 0) {
+        const commentsListHtml = comments.map(c => {
+          const cu = c.user || {};
+          const cInitials = (cu.display_name || cu.handle || 'C').substring(0, 2).toUpperCase();
+          const cVerified = cu.verified ? '<span class="verified-check" title="Verified">✓</span>' : '';
+          const cDate = c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+          let cSentBadge = '';
+          if (c.sentiment) {
+            cSentBadge = `<span class="comment-sentiment-badge sentiment-${c.sentiment.label}">${c.sentiment.label.toUpperCase()} • ${c.sentiment.emotion}</span>`;
+          }
+
+          return `
+            <div class="comment-item">
+              <div class="comment-avatar">${cInitials}</div>
+              <div class="comment-body-wrapper">
+                <div class="comment-meta">
+                  <span class="comment-name">${escapeHtml(cu.display_name || cu.handle || 'Anonymous')} ${cVerified}</span>
+                  <span class="comment-handle">@${escapeHtml(cu.handle || 'user')}</span>
+                  <span class="comment-time">${cDate}</span>
+                  ${cSentBadge}
+                </div>
+                <div class="comment-text">${escapeHtml(c.text)}</div>
+                <div class="comment-stats">
+                  <span>❤️ ${c.like_count || 0}</span>
+                  <span>💬 ${c.reply_count || 0}</span>
+                  <span style="font-family: var(--font-mono); font-size: 0.68rem; margin-left: auto;">ID: ${c.post_id}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        commentsSectionHtml = `
+          <div class="tweet-comments-container">
+            <button type="button" class="btn-toggle-comments" data-post-id="${tweet.post_id}">
+              <span class="toggle-icon">💬</span>
+              <span class="toggle-text">Comments (${commentsCount})</span>
+              <span class="toggle-arrow">▼</span>
+            </button>
+            <div class="tweet-comments-drawer open" id="drawer-${tweet.post_id}">
+              ${commentsListHtml}
+            </div>
+          </div>
+        `;
+      } else {
+        commentsSectionHtml = `
+          <div class="tweet-comments-container">
+            <div class="comments-actions-bar">
+              <button type="button" class="btn-scrape-comments-live" data-post-id="${tweet.post_id}">
+                <span>💬</span>
+                <span>Scrape Comments on this Post</span>
+              </button>
+            </div>
+            <div class="tweet-comments-drawer" id="drawer-${tweet.post_id}" style="display: none;"></div>
+          </div>
+        `;
       }
 
       card.innerHTML = `
@@ -344,11 +471,103 @@ document.addEventListener('DOMContentLoaded', () => {
           <span class="tweet-stat" title="Quotes">📑 ${tweet.quote_count || 0}</span>
           <span class="tweet-stat" style="margin-left: auto; font-family: var(--font-mono); font-size: 0.7rem;">ID: ${tweet.post_id}</span>
         </div>
+        ${commentsSectionHtml}
       `;
 
       tweetStream.appendChild(card);
     });
   }
+
+  // Handle click on comments toggle and live scraping
+  tweetStream.addEventListener('click', async (e) => {
+    const toggleBtn = e.target.closest('.btn-toggle-comments');
+    if (toggleBtn) {
+      const postId = toggleBtn.getAttribute('data-post-id');
+      const drawer = document.getElementById(`drawer-${postId}`);
+      if (drawer) {
+        const isHidden = drawer.style.display === 'none' || !drawer.classList.contains('open');
+        if (isHidden) {
+          drawer.style.display = 'flex';
+          drawer.classList.add('open');
+          const arrow = toggleBtn.querySelector('.toggle-arrow');
+          if (arrow) arrow.textContent = '▼';
+        } else {
+          drawer.style.display = 'none';
+          drawer.classList.remove('open');
+          const arrow = toggleBtn.querySelector('.toggle-arrow');
+          if (arrow) arrow.textContent = '▶';
+        }
+      }
+      return;
+    }
+
+    const scrapeBtn = e.target.closest('.btn-scrape-comments-live');
+    if (scrapeBtn) {
+      const postId = scrapeBtn.getAttribute('data-post-id');
+      const drawer = document.getElementById(`drawer-${postId}`);
+      if (!postId || !drawer) return;
+
+      scrapeBtn.disabled = true;
+      scrapeBtn.innerHTML = `<span>⏳</span><span>Scraping comments...</span>`;
+      addLog(`Initiating live comment extraction for Tweet ID ${postId}...`, 'info');
+
+      try {
+        const cRes = await fetch('/api/scraper/comments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ post_id: parseInt(postId, 10), limit: 10 })
+        });
+        const cData = await cRes.json();
+        if (!cRes.ok) throw new Error(cData.detail || 'Failed to scrape comments');
+
+        if (cData.comments && cData.comments.length > 0) {
+          addLog(`Retrieved ${cData.comments.length} comments for Tweet ID ${postId}!`, 'success');
+          drawer.innerHTML = cData.comments.map(c => {
+            const cu = c.user || {};
+            const cInitials = (cu.display_name || cu.handle || 'C').substring(0, 2).toUpperCase();
+            const cVerified = cu.verified ? '<span class="verified-check" title="Verified">✓</span>' : '';
+            const cDate = c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            let cSentBadge = '';
+            if (c.sentiment) {
+              cSentBadge = `<span class="comment-sentiment-badge sentiment-${c.sentiment.label}">${c.sentiment.label.toUpperCase()} • ${c.sentiment.emotion}</span>`;
+            }
+            return `
+              <div class="comment-item">
+                <div class="comment-avatar">${cInitials}</div>
+                <div class="comment-body-wrapper">
+                  <div class="comment-meta">
+                    <span class="comment-name">${escapeHtml(cu.display_name || cu.handle || 'Anonymous')} ${cVerified}</span>
+                    <span class="comment-handle">@${escapeHtml(cu.handle || 'user')}</span>
+                    <span class="comment-time">${cDate}</span>
+                    ${cSentBadge}
+                  </div>
+                  <div class="comment-text">${escapeHtml(c.text)}</div>
+                  <div class="comment-stats">
+                    <span>❤️ ${c.like_count || 0}</span>
+                    <span>💬 ${c.reply_count || 0}</span>
+                    <span style="font-family: var(--font-mono); font-size: 0.68rem; margin-left: auto;">ID: ${c.post_id}</span>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+          drawer.style.display = 'flex';
+          drawer.classList.add('open');
+          scrapeBtn.innerHTML = `<span>💬</span><span>Comments (${cData.comments.length})</span><span class="toggle-arrow">▼</span>`;
+          scrapeBtn.classList.remove('btn-scrape-comments-live');
+          scrapeBtn.classList.add('btn-toggle-comments');
+          scrapeBtn.disabled = false;
+        } else {
+          scrapeBtn.innerHTML = `<span>ℹ️</span><span>No public comments found</span>`;
+          addLog(`No comments found for Tweet ID ${postId}.`, 'info');
+        }
+      } catch (err) {
+        scrapeBtn.disabled = false;
+        scrapeBtn.innerHTML = `<span>⚠️</span><span>Retry Comments Scrape</span>`;
+        addLog(`Error scraping comments: ${err.message}`, 'error');
+      }
+    }
+  });
 
   // Render Graph Edges
   function renderEdges(edges) {
@@ -648,6 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ══════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
   // RENDER NETWORK TOPOLOGY & LINK ANALYSIS
   // ══════════════════════════════════════════════════════════════
   let activeNetworkSimulation = null;
@@ -659,14 +879,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const netEdgesCount = document.getElementById('net-edges-count');
     const netDensityVal = document.getElementById('net-density-val');
     const netCommunityCount = document.getElementById('net-community-count');
+    const kolCardsGrid = document.getElementById('kol-cards-grid');
     const kolTableBody = document.getElementById('kol-table-body');
     const communitiesCardsGrid = document.getElementById('communities-cards-grid');
     const spreadCascadeTimeline = document.getElementById('spread-cascade-timeline');
     const canvas = document.getElementById('network-canvas');
     const tooltip = document.getElementById('canvas-tooltip');
-    const btnZoomIn = document.getElementById('btn-graph-zoom-in');
-    const btnZoomOut = document.getElementById('btn-graph-zoom-out');
-    const btnReset = document.getElementById('btn-graph-reset');
 
     if (!summary || (!summary.nodes?.length && !summary.influencers?.length)) {
       if (networkEmptyState) networkEmptyState.style.display = 'flex';
@@ -678,62 +896,151 @@ document.addEventListener('DOMContentLoaded', () => {
     if (networkDashboard) networkDashboard.style.display = 'block';
 
     // Stats bar
-    if (netNodesCount) netNodesCount.textContent = summary.total_nodes;
-    if (netEdgesCount) netEdgesCount.textContent = summary.total_edges;
-    if (netDensityVal) netDensityVal.textContent = summary.graph_density;
+    const totalNodes = summary.total_nodes || summary.nodes?.length || 0;
+    const totalEdges = summary.total_edges || summary.links?.length || 0;
+    if (netNodesCount) netNodesCount.textContent = totalNodes;
+    if (netEdgesCount) netEdgesCount.textContent = totalEdges;
+    if (netDensityVal) netDensityVal.textContent = summary.graph_density || 0;
     if (netCommunityCount) netCommunityCount.textContent = summary.communities?.length || 0;
 
-    // 1. Key Opinion Leaders (KOL) Leaderboard
-    if (kolTableBody) {
-      kolTableBody.innerHTML = '';
-      (summary.influencers || []).forEach((inf, idx) => {
-        const row = document.createElement('tr');
+    // Helper archetype styling
+    function getArchetypeMeta(archetype) {
+      if (archetype === 'Key Opinion Leader') return { cls: 'archetype-kol', icon: '👑', label: 'Key Opinion Leader' };
+      if (archetype === 'Broadcast Amplifier') return { cls: 'archetype-amplifier', icon: '📡', label: 'Amplifier' };
+      if (archetype === 'Information Broker') return { cls: 'archetype-broker', icon: '🔗', label: 'Broker' };
+      return { cls: 'archetype-responder', icon: '💬', label: 'Responder' };
+    }
 
-        let archClass = 'archetype-kol';
-        if (inf.archetype === 'Information Broker') archClass = 'archetype-broker';
-        else if (inf.archetype === 'Broadcast Amplifier') archClass = 'archetype-amplifier';
-        else if (inf.archetype === 'Active Responder') archClass = 'archetype-responder';
+    // 1. Key Opinion Leaders (KOL) Modern Cards Grid
+    const influencers = summary.influencers || [];
+    if (kolCardsGrid) {
+      kolCardsGrid.innerHTML = '';
+      influencers.forEach((inf, idx) => {
+        const card = document.createElement('div');
+        card.className = 'kol-card';
+        card.setAttribute('data-user-id', inf.user_id || inf.handle);
 
+        const archMeta = getArchetypeMeta(inf.archetype);
+        const rankClass = idx === 0 ? 'rank-1' : idx === 1 ? 'rank-2' : idx === 2 ? 'rank-3' : '';
+        const initial = (inf.display_name || inf.handle || '?').charAt(0).toUpperCase();
         const sentClass = `sentiment-${inf.dominant_sentiment || 'neutral'}`;
 
-        row.innerHTML = `
-          <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-cyan);">#${idx + 1}</td>
-          <td>
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <span style="font-weight: 600; color: var(--text-primary);">@${escapeHtml(inf.handle)}</span>
-              ${inf.verified ? '<span class="verified-check">✓</span>' : ''}
+        card.innerHTML = `
+          <div class="kol-card-top">
+            <span class="kol-rank-badge ${rankClass}">#${idx + 1}</span>
+            <div class="kol-user-info">
+              <div class="kol-handle-row">
+                <span>@${escapeHtml(inf.handle)}</span>
+                ${inf.verified ? '<span class="verified-check" title="Verified">✓</span>' : ''}
+              </div>
+              <div class="kol-followers-sub">${(inf.followers_count || 0).toLocaleString()} followers • ${escapeHtml(inf.display_name || inf.handle)}</div>
             </div>
-            <span style="font-size: 0.72rem; color: var(--text-muted);">${(inf.followers_count || 0).toLocaleString()} followers</span>
-          </td>
-          <td><span class="archetype-badge ${archClass}">${inf.archetype}</span></td>
-          <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-amber);">${inf.influence_score}</td>
-          <td style="font-family: var(--font-mono);">${inf.pagerank}</td>
-          <td style="font-family: var(--font-mono);">${inf.in_degree}</td>
-          <td style="font-family: var(--font-mono);">${inf.out_degree}</td>
-          <td style="font-family: var(--font-mono);">${inf.betweenness}</td>
-          <td><span class="sentiment-badge ${sentClass}">${inf.dominant_sentiment}</span></td>
+            <div class="kol-score-pill">
+              <span class="kol-score-num">${inf.influence_score}</span>
+              <span class="kol-score-lbl">Influence</span>
+            </div>
+          </div>
+          <div class="kol-badges-row">
+            <span class="archetype-badge ${archMeta.cls}">${archMeta.icon} ${archMeta.label}</span>
+            <span class="sentiment-badge ${sentClass}">${inf.dominant_sentiment || 'neutral'}</span>
+          </div>
+          <div class="kol-stats-strip">
+            <div class="kol-strip-item">
+              <span>PageRank</span>
+              <span>${inf.pagerank}</span>
+            </div>
+            <div class="kol-strip-item">
+              <span>In-Degree</span>
+              <span>${inf.in_degree}</span>
+            </div>
+            <div class="kol-strip-item">
+              <span>Betweenness</span>
+              <span>${inf.betweenness}</span>
+            </div>
+          </div>
+        `;
+
+        card.addEventListener('click', () => {
+          document.querySelectorAll('.kol-card').forEach(c => c.classList.remove('active-selected'));
+          card.classList.add('active-selected');
+          if (activeNetworkSimulation) {
+            activeNetworkSimulation.selectNodeById(inf.user_id, inf.handle);
+          }
+        });
+
+        kolCardsGrid.appendChild(card);
+      });
+    }
+
+    // Keep hidden tbody populated for backwards compatibility
+    if (kolTableBody) {
+      kolTableBody.innerHTML = '';
+      influencers.forEach((inf, idx) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>#${idx + 1}</td>
+          <td>@${escapeHtml(inf.handle)}</td>
+          <td>${inf.archetype}</td>
+          <td>${inf.influence_score}</td>
+          <td>${inf.pagerank}</td>
+          <td>${inf.in_degree}</td>
+          <td>${inf.out_degree}</td>
+          <td>${inf.betweenness}</td>
+          <td>${inf.dominant_sentiment}</td>
         `;
         kolTableBody.appendChild(row);
       });
     }
 
-    // 2. Communities Cards
+    // 2. Communities Cards Grid
     if (communitiesCardsGrid) {
       communitiesCardsGrid.innerHTML = '';
       (summary.communities || []).forEach(comm => {
         const card = document.createElement('div');
         card.className = 'community-card';
-        card.style.borderTopColor = comm.color || '#3b82f6';
+        card.style.borderTopColor = comm.color || '#38bdf8';
 
-        const topPills = (comm.top_influencers || [])
-          .map(h => `<span class="tag-pill tag-mention">${escapeHtml(h)}</span>`)
-          .join(' ');
+        // Sentiment breakdown mini-bar if available
+        let sentBreakdownHtml = '';
+        if (comm.sentiment_breakdown) {
+          const pos = (comm.sentiment_breakdown.positive || 0) * 100;
+          const neu = (comm.sentiment_breakdown.neutral || 0) * 100;
+          const neg = (comm.sentiment_breakdown.negative || 0) * 100;
+          sentBreakdownHtml = `
+            <div class="comm-sent-bar-track" title="Positive: ${pos.toFixed(0)}%, Neutral: ${neu.toFixed(0)}%, Negative: ${neg.toFixed(0)}%">
+              <div class="comm-sent-pos" style="width: ${pos}%"></div>
+              <div class="comm-sent-neu" style="width: ${neu}%"></div>
+              <div class="comm-sent-neg" style="width: ${neg}%"></div>
+            </div>
+          `;
+        }
+
+        const topPills = (comm.top_influencers || []).map(h => {
+          const rawHandle = h.replace(/^@/, '');
+          return `<span class="comm-inf-chip" data-handle="${escapeHtml(rawHandle)}">${escapeHtml(h)}</span>`;
+        }).join(' ');
 
         card.innerHTML = `
-          <div class="community-title" style="color: ${comm.color || 'var(--text-primary)'};">${escapeHtml(comm.label)}</div>
-          <div class="community-members">${comm.member_count} active members • Dominant: <strong>${comm.dominant_sentiment}</strong></div>
-          <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;">${topPills}</div>
+          <div class="community-title" style="color: ${comm.color || 'var(--text-primary)'};">
+            <span>${escapeHtml(comm.label)}</span>
+            <span class="sentiment-badge sentiment-${comm.dominant_sentiment || 'neutral'}">${comm.dominant_sentiment}</span>
+          </div>
+          <div class="community-members">${comm.member_count} active members in cluster</div>
+          ${sentBreakdownHtml}
+          <div class="community-influencers-row">${topPills}</div>
         `;
+
+        // Clicking influencer chips focuses them in the graph
+        card.querySelectorAll('.comm-inf-chip').forEach(chip => {
+          chip.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const h = chip.getAttribute('data-handle');
+            if (activeNetworkSimulation) {
+              activeNetworkSimulation.selectNodeByHandle(h);
+            }
+          });
+        });
+
         communitiesCardsGrid.appendChild(card);
       });
     }
@@ -742,24 +1049,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (spreadCascadeTimeline) {
       spreadCascadeTimeline.innerHTML = '';
       if (!summary.spread_cascade || summary.spread_cascade.length === 0) {
-        spreadCascadeTimeline.innerHTML = `<div style="color: var(--text-muted); font-size: 0.8rem; padding: 10px;">Direct interaction cascade will populate as replies & quotes are discovered.</div>`;
+        spreadCascadeTimeline.innerHTML = `<div style="color: var(--text-muted); font-size: 0.8rem; padding: 12px;">Direct interaction cascade will populate as replies & quotes are discovered.</div>`;
       } else {
         summary.spread_cascade.forEach(step => {
           const card = document.createElement('div');
           card.className = 'cascade-step-card';
-          const sentClass = `sentiment-${step.sentiment || 'neutral'}`;
+          const sentClass = `sentiment-${step.sentiment_tone || step.sentiment || 'neutral'}`;
 
           card.innerHTML = `
-            <div class="step-num-badge">${step.step}</div>
+            <div class="step-num-badge">${step.step_order || step.step || '•'}</div>
             <div class="cascade-content">
               <div class="cascade-flow-header">
-                <strong>${escapeHtml(step.source)}</strong>
-                <span class="flow-arrow">──(${step.edge_type})──►</span>
-                <strong>${escapeHtml(step.target)}</strong>
-                <span class="sentiment-badge ${sentClass}">${step.sentiment}</span>
-                <span style="margin-left: auto; font-size: 0.72rem; color: var(--text-muted);">${step.from_segment} ➔ ${step.to_segment}</span>
+                <strong style="color: #38bdf8;">${escapeHtml(step.source_handle || step.source)}</strong>
+                <span class="flow-arrow">──(${escapeHtml(step.edge_type)})──►</span>
+                <strong style="color: #a855f7;">${escapeHtml(step.target_handle || step.target)}</strong>
+                <span class="sentiment-badge ${sentClass}">${step.sentiment_tone || step.sentiment}</span>
+                <span style="margin-left: auto; font-size: 0.72rem; color: var(--text-muted);">${escapeHtml(step.from_segment)} ➔ ${escapeHtml(step.to_segment)}</span>
               </div>
-              <div class="cascade-quote">${escapeHtml(step.snippet)}</div>
+              <div class="cascade-quote">${escapeHtml(step.post_snippet || step.snippet || '')}</div>
             </div>
           `;
           spreadCascadeTimeline.appendChild(card);
@@ -767,13 +1074,35 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // 4. Interactive Canvas Network Graph Engine
+    // 4. Interactive Force-Directed Canvas Graph Engine
     if (canvas && summary.nodes?.length) {
       if (activeNetworkSimulation) {
         activeNetworkSimulation.destroy();
       }
       activeNetworkSimulation = initNetworkCanvas(canvas, tooltip, summary.nodes, summary.links || [], {
-        btnZoomIn, btnZoomOut, btnReset
+        btnZoomIn: document.getElementById('btn-graph-zoom-in'),
+        btnZoomOut: document.getElementById('btn-graph-zoom-out'),
+        btnFit: document.getElementById('btn-graph-fit'),
+        btnReset: document.getElementById('btn-graph-reset'),
+        searchInput: document.getElementById('graph-search'),
+        archetypeFilter: document.getElementById('graph-filter-archetype'),
+        sentimentFilter: document.getElementById('graph-filter-sentiment'),
+        settleBadge: document.getElementById('net-settle-badge'),
+        detailPanel: document.getElementById('graph-detail-panel'),
+        detailEmpty: document.getElementById('gdp-empty'),
+        detailContent: document.getElementById('gdp-content'),
+        detailAvatar: document.getElementById('gdp-avatar'),
+        detailName: document.getElementById('gdp-name'),
+        detailHandle: document.getElementById('gdp-handle'),
+        detailArchetype: document.getElementById('gdp-archetype'),
+        detailScore: document.getElementById('gdp-score'),
+        detailPagerank: document.getElementById('gdp-pagerank'),
+        detailIndegree: document.getElementById('gdp-indegree'),
+        detailOutdegree: document.getElementById('gdp-outdegree'),
+        detailBetween: document.getElementById('gdp-between'),
+        detailFollowers: document.getElementById('gdp-followers'),
+        detailSentiment: document.getElementById('gdp-sentiment-row'),
+        detailClose: document.getElementById('gdp-close'),
       });
     }
   }
@@ -785,14 +1114,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const ctx = canvas.getContext('2d');
     let animationFrameId = null;
 
-    // Resize canvas for sharp retina displays
-    const rect = canvas.getBoundingClientRect();
+    let width = 750;
+    let height = 520;
     const dpr = window.devicePixelRatio || 1;
-    const width = rect.width || 750;
-    const height = 380;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      width = Math.max(300, rect.width || canvas.parentElement?.clientWidth || 750);
+      height = Math.max(380, rect.height || 520);
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+    }
+    resizeCanvas();
 
     // Pan & Zoom state
     let zoom = 1.0;
@@ -802,46 +1137,91 @@ document.addEventListener('DOMContentLoaded', () => {
     let dragStartX = 0;
     let dragStartY = 0;
     let hoveredNode = null;
+    let selectedNode = null;
     let draggedNode = null;
 
-    // Build Node objects with positions
+    // Filters
+    let searchTerm = '';
+    let filterArchetype = 'all';
+    let filterSentiment = 'all';
+
+    // Build Node objects with initial distributed positions
     const nodeMap = new Map();
     const nodes = rawNodes.map((rn, i) => {
-      const angle = (i / rawNodes.length) * Math.PI * 2;
-      const radius = 90 + (i % 3) * 45;
+      const angle = (i / Math.max(1, rawNodes.length)) * Math.PI * 2;
+      const radius = 80 + (i % 4) * 55;
       const node = {
         ...rn,
         x: Math.cos(angle) * radius,
         y: Math.sin(angle) * radius,
         vx: 0,
         vy: 0,
-        radius: Math.max(12, Math.min(26, rn.size || 16)),
+        radius: Math.max(13, Math.min(28, rn.size || 16)),
+        connectedNodeIds: new Set(),
+        connectedLinks: [],
       };
-      nodeMap.set(rn.id, node);
+      nodeMap.set(String(rn.id), node);
       return node;
     });
 
-    // Build Link objects
-    const links = rawLinks.map(rl => ({
-      source: nodeMap.get(rl.source) || nodes[0],
-      target: nodeMap.get(rl.target) || nodes[nodes.length - 1],
-      type: rl.type || 'interaction',
-      weight: rl.weight || 1,
-    })).filter(l => l.source && l.target && l.source !== l.target);
+    // Build Link objects & link neighbors
+    const links = rawLinks.map(rl => {
+      const src = nodeMap.get(String(rl.source));
+      const tgt = nodeMap.get(String(rl.target));
+      if (!src || !tgt || src === tgt) return null;
+      const link = {
+        source: src,
+        target: tgt,
+        type: rl.type || 'interaction',
+        weight: rl.weight || 1,
+      };
+      src.connectedNodeIds.add(tgt.id);
+      tgt.connectedNodeIds.add(src.id);
+      src.connectedLinks.push(link);
+      tgt.connectedLinks.push(link);
+      return link;
+    }).filter(Boolean);
 
-    // Force Simulation physics loop
+    // Physics Simulation
     let simulationSteps = 0;
-    const maxSteps = 300;
+    const maxSteps = 320;
+    let isSettled = false;
+
+    function updateSettleBadge(settling) {
+      if (!controls.settleBadge) return;
+      if (settling) {
+        controls.settleBadge.textContent = '⚙️ Simulating…';
+        controls.settleBadge.className = 'stat-pill net-settle-badge settling';
+      } else {
+        controls.settleBadge.textContent = '✅ Settled';
+        controls.settleBadge.className = 'stat-pill net-settle-badge settled';
+      }
+    }
+    updateSettleBadge(true);
+
+    function awakenPhysics() {
+      simulationSteps = 0;
+      if (isSettled) {
+        isSettled = false;
+        updateSettleBadge(true);
+      }
+    }
 
     function stepPhysics() {
-      if (simulationSteps > maxSteps) return;
+      if (simulationSteps > maxSteps) {
+        if (!isSettled) {
+          isSettled = true;
+          updateSettleBadge(false);
+        }
+        return;
+      }
       simulationSteps++;
 
-      const repulsion = 1800;
-      const springLength = 110;
-      const springStrength = 0.04;
-      const damping = 0.86;
-      const centerGravity = 0.015;
+      const repulsion = 2200;
+      const springLength = 120;
+      const springStrength = 0.045;
+      const damping = 0.84;
+      const centerGravity = 0.012;
 
       // 1. Coulomb node-to-node repulsion
       for (let i = 0; i < nodes.length; i++) {
@@ -852,7 +1232,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const dy = n2.y - n1.y;
           const distSq = dx * dx + dy * dy || 1;
           const dist = Math.sqrt(distSq);
-          if (dist < 320) {
+          if (dist < 360) {
             const force = repulsion / distSq;
             const fx = (dx / dist) * force;
             const fy = (dy / dist) * force;
@@ -880,6 +1260,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // 3. Center gravity & integrate
+      let totalV = 0;
       for (const n of nodes) {
         if (n === draggedNode) continue;
         n.vx -= n.x * centerGravity;
@@ -888,19 +1269,44 @@ document.addEventListener('DOMContentLoaded', () => {
         n.vy *= damping;
         n.x += n.vx;
         n.y += n.vy;
+        totalV += Math.abs(n.vx) + Math.abs(n.vy);
+      }
+
+      if (simulationSteps > 50 && totalV / nodes.length < 0.08) {
+        simulationSteps = maxSteps + 1;
+        isSettled = true;
+        updateSettleBadge(false);
       }
     }
 
+    // Helper to test if a node matches current active filter
+    function matchesFilter(n) {
+      if (searchTerm) {
+        const q = searchTerm.toLowerCase();
+        const label = (n.label || '').toLowerCase();
+        const name = (n.name || '').toLowerCase();
+        if (!label.includes(q) && !name.includes(q)) return false;
+      }
+      if (filterArchetype !== 'all' && n.archetype !== filterArchetype) {
+        return false;
+      }
+      if (filterSentiment !== 'all' && (n.sentiment || '').toLowerCase() !== filterSentiment) {
+        return false;
+      }
+      return true;
+    }
+
+    // Canvas Render Loop
     function render() {
       stepPhysics();
 
       ctx.save();
       ctx.clearRect(0, 0, width, height);
 
-      // Background subtle grid
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
+      // Subtle Background Matrix Grid
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.035)';
       ctx.lineWidth = 1;
-      const gridSize = 40 * zoom;
+      const gridSize = 44 * zoom;
       const offsetX = panX % gridSize;
       const offsetY = panY % gridSize;
       ctx.beginPath();
@@ -912,62 +1318,127 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       ctx.stroke();
 
-      // Apply transform
+      // Apply pan & zoom
       ctx.translate(panX, panY);
       ctx.scale(zoom, zoom);
 
-      // Draw Links
-      ctx.lineWidth = 1.5;
+      const hasFilter = searchTerm || filterArchetype !== 'all' || filterSentiment !== 'all';
+
+      // ── Draw Links ──
       for (const link of links) {
-        ctx.strokeStyle = 'rgba(0, 240, 255, 0.22)';
+        const isConnectedToSelected = selectedNode && (link.source === selectedNode || link.target === selectedNode);
+        let linkOpacity = 0.25;
+
+        if (selectedNode) {
+          linkOpacity = isConnectedToSelected ? 0.9 : 0.05;
+        } else if (hasFilter) {
+          const sMatch = matchesFilter(link.source);
+          const tMatch = matchesFilter(link.target);
+          linkOpacity = (sMatch && tMatch) ? 0.45 : 0.05;
+        }
+
+        // Link color by edge type
+        let strokeColor = `rgba(56, 189, 248, ${linkOpacity})`;
+        if (link.type === 'retweet' || link.type === 'quote') {
+          strokeColor = `rgba(168, 85, 247, ${linkOpacity})`;
+        } else if (link.type === 'reply') {
+          strokeColor = `rgba(16, 185, 129, ${linkOpacity})`;
+        }
+
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = isConnectedToSelected ? 2.5 : 1.4;
         ctx.beginPath();
         ctx.moveTo(link.source.x, link.source.y);
         ctx.lineTo(link.target.x, link.target.y);
         ctx.stroke();
 
-        // Draw arrow tip
-        const dx = link.target.x - link.source.x;
-        const dy = link.target.y - link.source.y;
-        const angle = Math.atan2(dy, dx);
-        const arrowDist = link.target.radius + 6;
-        const ax = link.target.x - Math.cos(angle) * arrowDist;
-        const ay = link.target.y - Math.sin(angle) * arrowDist;
+        // Draw directional arrow tip
+        if (linkOpacity > 0.1) {
+          const dx = link.target.x - link.source.x;
+          const dy = link.target.y - link.source.y;
+          const angle = Math.atan2(dy, dx);
+          const arrowDist = link.target.radius + 6;
+          const ax = link.target.x - Math.cos(angle) * arrowDist;
+          const ay = link.target.y - Math.sin(angle) * arrowDist;
 
-        ctx.fillStyle = 'rgba(0, 240, 255, 0.5)';
-        ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(ax - 7 * Math.cos(angle - Math.PI / 6), ay - 7 * Math.sin(angle - Math.PI / 6));
-        ctx.lineTo(ax - 7 * Math.cos(angle + Math.PI / 6), ay - 7 * Math.sin(angle + Math.PI / 6));
-        ctx.closePath();
-        ctx.fill();
+          ctx.fillStyle = strokeColor;
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(ax - 7 * Math.cos(angle - Math.PI / 6), ay - 7 * Math.sin(angle - Math.PI / 6));
+          ctx.lineTo(ax - 7 * Math.cos(angle + Math.PI / 6), ay - 7 * Math.sin(angle + Math.PI / 6));
+          ctx.closePath();
+          ctx.fill();
+        }
       }
 
-      // Draw Nodes
+      // ── Draw Nodes ──
       for (const n of nodes) {
         const isHovered = n === hoveredNode;
+        const isSelected = n === selectedNode;
+        const isNeighborOfSelected = selectedNode && selectedNode.connectedNodeIds.has(n.id);
+        const match = matchesFilter(n);
+
+        let nodeOpacity = 1.0;
+        if (selectedNode) {
+          nodeOpacity = (isSelected || isNeighborOfSelected) ? 1.0 : 0.14;
+        } else if (hasFilter) {
+          nodeOpacity = match ? 1.0 : 0.15;
+        }
+
+        ctx.globalAlpha = nodeOpacity;
 
         // Outer glow
-        if (isHovered) {
+        if (isSelected || isHovered || (hasFilter && match)) {
           ctx.beginPath();
-          ctx.arc(n.x, n.y, n.radius + 6, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(0, 240, 255, 0.35)';
+          ctx.arc(n.x, n.y, n.radius + (isSelected ? 9 : 6), 0, Math.PI * 2);
+          ctx.fillStyle = isSelected
+            ? 'rgba(56, 189, 248, 0.45)'
+            : 'rgba(56, 189, 248, 0.25)';
           ctx.fill();
         }
 
-        // Node circle
+        // KOL high-influence outer pulse indicator
+        if (n.archetype === 'Key Opinion Leader' && nodeOpacity > 0.5) {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, n.radius + 4, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(251, 191, 36, 0.6)';
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+        }
+
+        // Inner node circle
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
         ctx.fillStyle = n.color || '#3b82f6';
         ctx.fill();
-        ctx.strokeStyle = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.4)';
-        ctx.lineWidth = isHovered ? 2.5 : 1.5;
+
+        // Border
+        ctx.strokeStyle = isSelected ? '#ffffff' : (isHovered ? '#38bdf8' : 'rgba(255, 255, 255, 0.45)');
+        ctx.lineWidth = isSelected ? 3.0 : (isHovered ? 2.2 : 1.5);
         ctx.stroke();
 
-        // Label
-        ctx.font = isHovered ? 'bold 11px JetBrains Mono, monospace' : '10px JetBrains Mono, monospace';
-        ctx.fillStyle = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.85)';
-        ctx.textAlign = 'center';
-        ctx.fillText(n.label, n.x, n.y + n.radius + 13);
+        // Label pill background for crisp readability
+        if (nodeOpacity > 0.4) {
+          const labelText = n.label || '';
+          ctx.font = (isSelected || isHovered) ? 'bold 11px JetBrains Mono, monospace' : '10px JetBrains Mono, monospace';
+          const textWidth = ctx.measureText(labelText).width;
+          const pillX = n.x - textWidth / 2 - 4;
+          const pillY = n.y + n.radius + 5;
+          const pillW = textWidth + 8;
+          const pillH = 15;
+
+          ctx.fillStyle = 'rgba(6, 10, 20, 0.85)';
+          ctx.beginPath();
+          ctx.roundRect(pillX, pillY, pillW, pillH, 4);
+          ctx.fill();
+
+          ctx.fillStyle = isSelected ? '#38bdf8' : (isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.9)');
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(labelText, n.x, pillY + pillH / 2);
+        }
+
+        ctx.globalAlpha = 1.0;
       }
 
       ctx.restore();
@@ -994,20 +1465,100 @@ document.addEventListener('DOMContentLoaded', () => {
         const n = nodes[i];
         const dx = worldX - n.x;
         const dy = worldY - n.y;
-        if (Math.sqrt(dx * dx + dy * dy) <= n.radius + 4) {
+        if (Math.sqrt(dx * dx + dy * dy) <= n.radius + 6) {
           return n;
         }
       }
       return null;
     }
 
-    // Mouse Listeners
+    // Detail Panel Update
+    function updateDetailPanel(node) {
+      if (!controls.detailPanel) return;
+
+      if (!node) {
+        if (controls.detailEmpty) controls.detailEmpty.style.display = 'flex';
+        if (controls.detailContent) controls.detailContent.style.display = 'none';
+        return;
+      }
+
+      if (controls.detailEmpty) controls.detailEmpty.style.display = 'none';
+      if (controls.detailContent) controls.detailContent.style.display = 'flex';
+
+      const initial = (node.name || node.label || '?').charAt(0).toUpperCase();
+      if (controls.detailAvatar) controls.detailAvatar.textContent = initial;
+      if (controls.detailName) {
+        controls.detailName.innerHTML = `${escapeHtml(node.name || node.label)} ${node.verified ? '<span class="verified-check">✓</span>' : ''}`;
+      }
+      if (controls.detailHandle) controls.detailHandle.textContent = node.label || '';
+      if (controls.detailArchetype) {
+        const archCls = node.archetype === 'Key Opinion Leader' ? 'archetype-kol'
+          : node.archetype === 'Broadcast Amplifier' ? 'archetype-amplifier'
+          : node.archetype === 'Information Broker' ? 'archetype-broker' : 'archetype-responder';
+        controls.detailArchetype.className = `archetype-badge ${archCls}`;
+        controls.detailArchetype.textContent = node.archetype || 'Participant';
+      }
+      if (controls.detailScore) controls.detailScore.textContent = node.score || '--';
+      if (controls.detailPagerank) controls.detailPagerank.textContent = node.pagerank || '--';
+      if (controls.detailIndegree) controls.detailIndegree.textContent = node.inDegree || node.in_degree || 0;
+      if (controls.detailOutdegree) controls.detailOutdegree.textContent = node.outDegree || node.out_degree || 0;
+      if (controls.detailBetween) controls.detailBetween.textContent = node.betweenness || '--';
+      if (controls.detailFollowers) controls.detailFollowers.textContent = (node.followers || 0).toLocaleString();
+
+      if (controls.detailSentiment) {
+        const sent = node.sentiment || 'neutral';
+        controls.detailSentiment.innerHTML = `
+          <span>Tone & Sentiment</span>
+          <span class="sentiment-badge sentiment-${sent}">${sent}</span>
+        `;
+      }
+    }
+
+    function selectNode(node) {
+      selectedNode = node;
+      updateDetailPanel(node);
+      awakenPhysics();
+
+      // Highlight corresponding KOL card if visible
+      document.querySelectorAll('.kol-card').forEach(c => {
+        if (node && (c.getAttribute('data-user-id') === String(node.id) || c.getAttribute('data-user-id') === (node.label || '').replace('@', ''))) {
+          c.classList.add('active-selected');
+          c.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+          c.classList.remove('active-selected');
+        }
+      });
+    }
+
+    // Zoom & Pan helpers
+    function fitGraph() {
+      if (nodes.length === 0) return;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      nodes.forEach(n => {
+        if (n.x < minX) minX = n.x;
+        if (n.x > maxX) maxX = n.x;
+        if (n.y < minY) minY = n.y;
+        if (n.y > maxY) maxY = n.y;
+      });
+
+      const pad = 60;
+      const graphW = Math.max(100, (maxX - minX) + pad * 2);
+      const graphH = Math.max(100, (maxY - minY) + pad * 2);
+
+      const targetZoom = Math.max(0.4, Math.min(2.0, Math.min(width / graphW, height / graphH)));
+      zoom = targetZoom;
+      panX = width / 2 - ((minX + maxX) / 2) * zoom;
+      panY = height / 2 - ((minY + maxY) / 2) * zoom;
+    }
+
+    // Mouse Interaction
     function onMouseDown(e) {
       const { x, y, screenX, screenY } = toWorldCoords(e.clientX, e.clientY);
       const hit = findNodeAt(x, y);
       if (hit) {
         draggedNode = hit;
-        simulationSteps = 0; // awaken physics
+        selectNode(hit);
+        awakenPhysics();
       } else {
         isDraggingCanvas = true;
         dragStartX = screenX - panX;
@@ -1024,6 +1575,7 @@ document.addEventListener('DOMContentLoaded', () => {
         draggedNode.y = y;
         draggedNode.vx = 0;
         draggedNode.vy = 0;
+        awakenPhysics();
         return;
       }
 
@@ -1041,23 +1593,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (hit && tooltip) {
           tooltip.style.display = 'block';
-          tooltip.style.left = `${Math.min(width - 230, screenX + 12)}px`;
-          tooltip.style.top = `${Math.min(height - 120, screenY + 12)}px`;
+          tooltip.style.left = `${Math.min(width - 240, screenX + 14)}px`;
+          tooltip.style.top = `${Math.min(height - 140, screenY + 14)}px`;
           tooltip.innerHTML = `
-            <div style="font-weight: 700; color: var(--accent-cyan); margin-bottom: 2px;">
+            <div style="font-weight: 700; color: #38bdf8; margin-bottom: 2px;">
               ${escapeHtml(hit.name || hit.label)}
             </div>
-            <div style="color: var(--text-muted); font-size: 0.72rem; margin-bottom: 4px;">
-              ${hit.label} • ${hit.archetype}
+            <div style="color: var(--text-muted); font-size: 0.72rem; margin-bottom: 6px;">
+              ${escapeHtml(hit.label)} • ${hit.archetype || 'Participant'}
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.72rem;">
-              <span>Score: <strong>${hit.score}</strong></span>
-              <span>PageRank: <strong>${hit.pagerank}</strong></span>
-              <span>In-Degree: <strong>${hit.inDegree}</strong></span>
-              <span>Out-Degree: <strong>${hit.outDegree}</strong></span>
+              <span>Score: <strong style="color:#fbbf24;">${hit.score || '--'}</strong></span>
+              <span>PageRank: <strong>${hit.pagerank || '--'}</strong></span>
+              <span>In-Degree: <strong>${hit.inDegree || hit.in_degree || 0}</strong></span>
+              <span>Out-Degree: <strong>${hit.outDegree || hit.out_degree || 0}</strong></span>
             </div>
-            <div style="margin-top: 4px; font-size: 0.7rem; color: var(--accent-emerald);">
-              Tone: ${hit.sentiment}
+            <div style="margin-top: 5px; font-size: 0.72rem; display: flex; justify-content: space-between;">
+              <span class="sentiment-badge sentiment-${hit.sentiment || 'neutral'}">${hit.sentiment || 'neutral'}</span>
+              <span style="color: var(--text-dim); font-size: 0.68rem;">Click to inspect</span>
             </div>
           `;
         } else if (tooltip) {
@@ -1066,7 +1619,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    function onMouseUp() {
+    function onMouseUp(e) {
+      if (!draggedNode && !isDraggingCanvas) {
+        const { x, y } = toWorldCoords(e.clientX, e.clientY);
+        const hit = findNodeAt(x, y);
+        if (!hit) {
+          // Deselect
+          selectNode(null);
+        }
+      }
       draggedNode = null;
       isDraggingCanvas = false;
       canvas.style.cursor = hoveredNode ? 'pointer' : 'grab';
@@ -1074,8 +1635,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function onWheel(e) {
       e.preventDefault();
-      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-      zoom = Math.max(0.4, Math.min(3.0, zoom * zoomFactor));
+      const zoomFactor = e.deltaY < 0 ? 1.12 : 0.88;
+      const newZoom = Math.max(0.3, Math.min(3.5, zoom * zoomFactor));
+
+      // Zoom towards mouse
+      const b = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - b.left;
+      const mouseY = e.clientY - b.top;
+
+      panX = mouseX - (mouseX - panX) * (newZoom / zoom);
+      panY = mouseY - (mouseY - panY) * (newZoom / zoom);
+      zoom = newZoom;
     }
 
     canvas.addEventListener('mousedown', onMouseDown);
@@ -1083,23 +1653,82 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('mouseup', onMouseUp);
     canvas.addEventListener('wheel', onWheel, { passive: false });
 
-    // Controls
+    // Toolbar Controls
     if (controls.btnZoomIn) {
-      controls.btnZoomIn.onclick = () => { zoom = Math.min(3.0, zoom * 1.25); };
+      controls.btnZoomIn.onclick = () => { zoom = Math.min(3.5, zoom * 1.25); };
     }
     if (controls.btnZoomOut) {
-      controls.btnZoomOut.onclick = () => { zoom = Math.max(0.4, zoom * 0.8); };
+      controls.btnZoomOut.onclick = () => { zoom = Math.max(0.3, zoom * 0.8); };
+    }
+    if (controls.btnFit) {
+      controls.btnFit.onclick = fitGraph;
     }
     if (controls.btnReset) {
       controls.btnReset.onclick = () => {
         zoom = 1.0;
         panX = width / 2;
         panY = height / 2;
-        simulationSteps = 0;
+        searchTerm = '';
+        filterArchetype = 'all';
+        filterSentiment = 'all';
+        if (controls.searchInput) controls.searchInput.value = '';
+        if (controls.archetypeFilter) controls.archetypeFilter.value = 'all';
+        if (controls.sentimentFilter) controls.sentimentFilter.value = 'all';
+        selectNode(null);
+        awakenPhysics();
       };
     }
 
+    if (controls.searchInput) {
+      controls.searchInput.oninput = (e) => {
+        searchTerm = e.target.value.trim();
+      };
+    }
+    if (controls.archetypeFilter) {
+      controls.archetypeFilter.onchange = (e) => {
+        filterArchetype = e.target.value;
+      };
+    }
+    if (controls.sentimentFilter) {
+      controls.sentimentFilter.onchange = (e) => {
+        filterSentiment = e.target.value;
+      };
+    }
+    if (controls.detailClose) {
+      controls.detailClose.onclick = () => {
+        selectNode(null);
+      };
+    }
+
+    // Auto-fit initial graph after physics starts
+    setTimeout(fitGraph, 300);
+
     return {
+      selectNodeById(id, fallbackHandle) {
+        let target = nodeMap.get(String(id));
+        if (!target && fallbackHandle) {
+          const cleanH = fallbackHandle.replace(/^@/, '').toLowerCase();
+          target = nodes.find(n => (n.label || '').replace(/^@/, '').toLowerCase() === cleanH);
+        }
+        if (target) {
+          selectNode(target);
+          panX = width / 2 - target.x * zoom;
+          panY = height / 2 - target.y * zoom;
+        }
+      },
+      selectNodeByHandle(handle) {
+        const clean = handle.replace(/^@/, '').toLowerCase();
+        const target = nodes.find(n => (n.label || '').replace(/^@/, '').toLowerCase() === clean);
+        if (target) {
+          selectNode(target);
+          panX = width / 2 - target.x * zoom;
+          panY = height / 2 - target.y * zoom;
+        }
+      },
+      resize() {
+        resizeCanvas();
+        fitGraph();
+      },
       destroy() {
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
         canvas.removeEventListener('mousedown', onMouseDown);
