@@ -1,245 +1,194 @@
-import React from 'react'
+import React from 'react';
+import { TrendingUp, Zap, Sparkles, Layers } from 'lucide-react';
 
 export default function TrendsPanel({ data }) {
   if (!data || (!data.rising_trends && !data.predicted_viral_topics)) {
     return (
-      <div className="empty-state">
-        <div className="empty-icon">📈</div>
-        <h4>No Trend Intelligence Found</h4>
-        <p>Run a search query with Trends Engine active or load the Demo Intelligence Dataset to visualize Kleinberg Poisson automaton burst detection and BERTopic clusters.</p>
+      <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+        <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4">
+          <TrendingUp className="w-6 h-6" />
+        </div>
+        <h4 className="text-base font-bold text-slate-900 mb-1">No Trend Bursts Detected</h4>
+        <p className="text-xs text-slate-500 max-w-sm mx-auto">
+          Execute a search query with Trend Detection enabled or load sample intelligence to examine Kleinberg Poisson burst automations.
+        </p>
       </div>
-    )
+    );
   }
 
-  const rising = data.rising_trends || []
-  const viral = data.predicted_viral_topics || data.viral_predictions || []
-  const clusters = data.topic_clusters || []
-  const shifts = data.chronological_shifts || []
+  const rising = data.rising_trends || [];
+  const viral = data.predicted_viral_topics || data.viral_predictions || [];
+  const clusters = data.topic_clusters || [];
+  const shifts = data.chronological_shifts || [];
 
   return (
-    <div>
-      {/* Stats Banner */}
-      <div className="stats-banner">
-        <div className="stat-item">
-          <span className="stat-label">Analyzed Window</span>
-          <span className="stat-value">{data.analyzed_window_hours || 24}h</span>
+    <div className="space-y-6">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Window Scope</div>
+          <div className="text-2xl font-extrabold text-slate-900 tracking-tight">{data.analyzed_window_hours || 24}h</div>
         </div>
-        <div className="stat-item">
-          <span className="stat-label">Rising Trends</span>
-          <span className="stat-value accent-lime">{rising.length}</span>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Rising Surges</div>
+          <div className="text-2xl font-extrabold text-blue-600 tracking-tight">{rising.length}</div>
         </div>
-        <div className="stat-item">
-          <span className="stat-label">Imminent Viral</span>
-          <span className="stat-value accent-rose">{viral.length}</span>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Imminent Peaks</div>
+          <div className="text-2xl font-extrabold text-amber-600 tracking-tight">{viral.length}</div>
         </div>
-        <div className="stat-item">
-          <span className="stat-label">Topic Clusters</span>
-          <span className="stat-value accent-purple">{clusters.length}</span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-label">Burst Engine</span>
-          <span className="stat-value" style={{ fontSize: '0.92rem', color: 'var(--accent-purple)' }}>
-            Kleinberg (2002)
-          </span>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Topic Clusters</div>
+          <div className="text-2xl font-extrabold text-indigo-600 tracking-tight">{clusters.length}</div>
         </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="intel-grid">
+      {/* Grid: Rising Bursts & Predictive Virality */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Rising Trends Table */}
-        <div className="intel-card">
-          <div className="intel-card-header">
-            <span>/01 Velocity Burst Detection</span>
-            <span style={{ color: 'var(--accent-lime-dark)' }}>Rising Topics</span>
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-blue-600" />
+              <h4 className="text-sm font-bold text-slate-900">Velocity Burst Detection</h4>
+            </div>
+            <span className="text-[11px] font-mono text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+              Kleinberg (2002)
+            </span>
           </div>
-          <div className="intel-card-body">
-            {rising.length === 0 ? (
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No emerging surges in current window.</span>
-            ) : (
-              <table className="data-table">
+
+          {rising.length === 0 ? (
+            <p className="text-xs text-slate-400 py-4 text-center">No burst velocity detected.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr>
-                    <th>Term / Hashtag</th>
-                    <th>Growth Rate</th>
-                    <th>Virality Score</th>
-                    <th>Status</th>
+                  <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="pb-2.5">Topic / Tag</th>
+                    <th className="pb-2.5">Growth</th>
+                    <th className="pb-2.5">Virality</th>
+                    <th className="pb-2.5">Status</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100">
                   {rising.map((t, i) => {
-                    const term = t.keyword || t.term || t[0] || 'Unknown'
-                    const rate = t.growth_rate ?? t.velocity ?? t[1] ?? 0
-                    const vScore = t.virality_score ?? 0.5
-                    const status = t.status || (vScore > 0.8 ? 'viral_surge' : 'rising')
+                    const term = t.keyword || t.term || t[0] || 'Unknown';
+                    const rate = t.growth_rate ?? t.velocity ?? t[1] ?? 0;
+                    const vScore = t.virality_score ?? 0.5;
+                    const status = t.status || (vScore > 0.8 ? 'viral_surge' : 'rising');
                     return (
-                      <tr key={i}>
-                        <td style={{ fontWeight: 800 }}>
-                          <span style={{ color: term.startsWith('#') ? 'var(--accent-purple)' : 'inherit' }}>
-                            {term}
-                          </span>
+                      <tr key={i} className="hover:bg-slate-50/50">
+                        <td className="py-2.5 font-bold text-slate-800">
+                          {term}
                         </td>
-                        <td>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#059669' }}>
-                            +{typeof rate === 'number' ? rate.toFixed(1) : rate}x
-                          </span>
+                        <td className="py-2.5 font-mono font-bold text-emerald-600">
+                          +{typeof rate === 'number' ? rate.toFixed(1) : rate}x
                         </td>
-                        <td>
-                          <span style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.72rem',
-                            fontWeight: 800,
-                            padding: '2px 6px',
-                            background: vScore > 0.85 ? 'var(--accent-lime)' : 'var(--bg-inset)',
-                            border: '1px solid #000',
-                          }}>
-                            {typeof vScore === 'number' ? vScore.toFixed(2) : vScore}
-                          </span>
+                        <td className="py-2.5 font-mono text-slate-600 font-medium">
+                          {typeof vScore === 'number' ? vScore.toFixed(2) : vScore}
                         </td>
-                        <td>
-                          <span style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.65rem',
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            color: status.includes('viral') ? 'var(--accent-rose)' : 'var(--text-secondary)'
-                          }}>
+                        <td className="py-2.5">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
                             {status.replace('_', ' ')}
                           </span>
                         </td>
                       </tr>
-                    )
+                    );
                   })}
                 </tbody>
               </table>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
-        {/* Predicted Viral Topics */}
-        <div className="intel-card">
-          <div className="intel-card-header">
-            <span>/02 Predictive Viral Trajectory</span>
-            <span style={{ color: 'var(--accent-rose)' }}>High-Probability Peak</span>
+        {/* Predictive Virality */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
+              <h4 className="text-sm font-bold text-slate-900">Predictive Virality Forecast</h4>
+            </div>
+            <span className="text-[11px] font-mono text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+              Poisson Automaton
+            </span>
           </div>
-          <div className="intel-card-body">
-            {viral.length === 0 ? (
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No imminent viral anomalies identified.</span>
-            ) : (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Predicted Term</th>
-                    <th>Viral Index</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {viral.map((v, i) => {
-                    const term = v.keyword || v.term || v[0] || 'Unknown'
-                    const score = v.virality_score ?? v.score ?? v[1] ?? 0.8
-                    const status = v.status || 'Imminent Surge'
-                    return (
-                      <tr key={i}>
-                        <td style={{ fontWeight: 800 }}>{term}</td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '60px', height: '8px', background: '#e2e2ec', border: '1px solid #000' }}>
-                              <div style={{ width: `${Math.min(100, score * 100)}%`, height: '100%', background: 'var(--accent-rose)' }} />
-                            </div>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.72rem' }}>
-                              {typeof score === 'number' ? score.toFixed(2) : score}
-                            </span>
-                          </div>
-                        </td>
-                        <td>
-                          <span style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.65rem',
-                            fontWeight: 800,
-                            padding: '2px 6px',
-                            background: '#fee2e2',
-                            border: '1px solid #ef4444',
-                            color: '#b91c1c',
-                            textTransform: 'uppercase'
-                          }}>
-                            {status}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
+
+          {viral.length === 0 ? (
+            <p className="text-xs text-slate-400 py-4 text-center">No imminent virality forecast.</p>
+          ) : (
+            <div className="space-y-3.5">
+              {viral.map((v, i) => {
+                const term = v.keyword || v.term || v[0] || 'Unknown';
+                const score = v.virality_score ?? v.score ?? v[1] ?? 0.8;
+                return (
+                  <div key={i} className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-slate-800 text-xs">{term}</div>
+                      <div className="text-[11px] text-slate-400 font-medium mt-0.5">
+                        High velocity peak trajectory
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-16 h-2 rounded-full bg-slate-200 overflow-hidden">
+                        <div 
+                          className="h-full rounded-full bg-amber-500" 
+                          style={{ width: `${Math.min(100, score * 100)}%` }} 
+                        />
+                      </div>
+                      <span className="font-mono text-xs font-bold text-slate-700">
+                        {typeof score === 'number' ? score.toFixed(2) : score}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Topic Clusters Section */}
+      {/* Semantic Topic Clusters */}
       {clusters.length > 0 && (
-        <div style={{ marginTop: 'var(--space-lg)' }}>
-          <div className="intel-card">
-            <div className="intel-card-header">
-              <span>/03 Semantic Topic Clusters (BERTopic + Co-occurrence Graph)</span>
-              <span style={{ color: 'var(--accent-purple)' }}>{clusters.length} Clusters</span>
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-indigo-600" />
+              <h4 className="text-sm font-bold text-slate-900">Semantic Topic Clusters</h4>
             </div>
-            <div className="intel-card-body">
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-md)' }}>
-                {clusters.map((c, i) => {
-                  const label = c.label || c.name || `Topic Cluster #${i + 1}`
-                  const terms = c.top_terms || c.terms || []
-                  const snippets = c.sample_snippets || []
-                  return (
-                    <div key={i} style={{
-                      padding: 'var(--space-md)',
-                      border: '2px solid #000',
-                      background: 'var(--bg-secondary)',
-                      boxShadow: '3px 3px 0px #000'
-                    }}>
-                      <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#000', marginBottom: '8px' }}>
-                        {label}
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
-                        {terms.map((term, j) => (
-                          <span key={j} style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.68rem',
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            background: '#ffffff',
-                            color: 'var(--accent-purple)',
-                            border: '1.5px solid #000',
-                          }}>
-                            #{term}
-                          </span>
-                        ))}
-                      </div>
-                      {snippets.length > 0 && (
-                        <div style={{
-                          fontSize: '0.74rem',
-                          color: 'var(--text-secondary)',
-                          fontStyle: 'italic',
-                          borderLeft: '2px solid var(--accent-lime)',
-                          paddingLeft: '8px',
-                        }}>
-                          "{snippets[0]}"
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+            <span className="text-[11px] font-mono text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+              BERTopic
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {clusters.map((c, i) => {
+              const label = c.label || c.name || `Cluster #${i + 1}`;
+              const terms = c.top_terms || c.terms || [];
+              const snippets = c.sample_snippets || [];
+              return (
+                <div key={i} className="p-4 rounded-xl border border-slate-200 bg-white hover:border-blue-200 transition-all shadow-xs space-y-2.5">
+                  <div className="font-bold text-xs text-slate-900">{label}</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {terms.map((t, idx) => (
+                      <span key={idx} className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono font-medium">
+                        #{t}
+                      </span>
+                    ))}
+                  </div>
+                  {snippets.length > 0 && (
+                    <p className="text-[11px] text-slate-500 italic border-l-2 border-blue-500 pl-2">
+                      "{snippets[0]}"
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
-
-      {/* Chronological Shifts */}
-      {shifts.length > 0 && (
-        <div style={{ marginTop: 'var(--space-md)', padding: '12px 16px', background: 'var(--bg-acid-yellow)', border: '2px solid #000', fontFamily: 'var(--font-mono)', fontSize: '0.74rem', fontWeight: 700 }}>
-          ⚡ CHRONOLOGICAL DISCOURSE SHIFT: {shifts[0]}
-        </div>
-      )}
     </div>
-  )
+  );
 }
